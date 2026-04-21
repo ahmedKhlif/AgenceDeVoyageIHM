@@ -1,0 +1,237 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum StatutReservation {
+  EN_ATTENTE
+  CONFIRMEE
+  BLOQUEE
+  ANNULEE
+  REFUSEE
+  TERMINEE
+}
+
+enum TypeNotification {
+  CONFIRMATION_RESERVATION
+  ANNULATION_RESERVATION
+  CONFIRMATION_ANNULATION
+  RAPPEL
+  PROMOTION
+  RECLAMATION
+}
+
+enum StatutReclamation {
+  OUVERTE
+  EN_COURS
+  RESOLUE
+  FERMEE
+}
+
+// ─── Models ──────────────────────────────────────────────────────────────────
+
+model Account {
+  id              Int           @id @default(autoincrement())
+  email           String        @unique
+  motDePasse      String
+  dateInscription DateTime      @default(now())
+  actif           Boolean       @default(true)
+  profile         Profile?
+  reservations    Reservation[]
+  notifications   Notification[]
+
+  @@map("accounts")
+}
+
+model Profile {
+  id          Int     @id @default(autoincrement())
+  accountId   Int     @unique
+  nom         String
+  prenom      String
+  telephone   String?
+  adresse     String?
+  nationalite String?
+  photo       String?
+  notificationsReservation Boolean @default(true)
+  notificationsPromotion   Boolean @default(false)
+  account     Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@map("profiles")
+}
+
+model AgenceVoyage {
+  id            Int          @id @default(autoincrement())
+  email         String       @unique
+  motDePasse    String
+  nomAgence     String
+  siret         String       @unique
+  adresseAgence String
+  actif         Boolean      @default(true)
+  hotels        Hotel[]
+  reclamations  Reclamation[]
+
+  @@map("agences_voyage")
+}
+
+model Hotel {
+  id             Int          @id @default(autoincrement())
+  nom            String
+  adresse        String
+  ville          String
+  pays           String
+  etoiles        Int
+  description    String?
+  email          String
+  telephone      String
+  actif          Boolean      @default(true)
+  estPartenaire  Boolean      @default(false)
+  agenceVoyageId Int
+  agenceVoyage   AgenceVoyage @relation(fields: [agenceVoyageId], references: [id])
+  chambres       Chambre[]
+  offres         Offre[]
+
+  @@map("hotels")
+}
+
+model TypeChambre {
+  id           Int       @id @default(autoincrement())
+  libelle      String    @unique
+  description  String?
+  superficieM2 Float
+  equipements  String[]
+  chambres     Chambre[]
+
+  @@map("types_chambre")
+}
+
+model Chambre {
+  id            Int           @id @default(autoincrement())
+  numero        String
+  etage         Int
+  prixParNuit   Float
+  capacite      Int
+  disponible    Boolean       @default(true)
+  photos        String[]
+  hotelId       Int
+  typeChambreId Int
+  hotel         Hotel         @relation(fields: [hotelId], references: [id])
+  typeChambre   TypeChambre   @relation(fields: [typeChambreId], references: [id])
+  reservations  Reservation[]
+  offres        OffreChambre[]
+
+  @@unique([hotelId, numero])
+  @@map("chambres")
+}
+
+model Reservation {
+  id                Int               @id @default(autoincrement())
+  accountId         Int
+  chambreId         Int
+  dateCreation      DateTime          @default(now())
+  dateArrivee       DateTime
+  dateDepart        DateTime
+  nombrePersonnes   Int
+  nombreNuits       Int
+  montantTotal      Float
+  codeConfirmation  String            @unique
+  statut            StatutReservation @default(EN_ATTENTE)
+  motifBlocage      String?
+  account           Account           @relation(fields: [accountId], references: [id])
+  chambre           Chambre           @relation(fields: [chambreId], references: [id])
+  avis              Avis[]
+  reclamations      Reclamation[]
+
+  @@map("reservations")
+}
+
+model Offre {
+  id          Int            @id @default(autoincrement())
+  titre       String
+  description String?
+  tauxRemise  Float
+  dateDebut   DateTime
+  dateFin     DateTime
+  active      Boolean        @default(true)
+  hotelId     Int
+  hotel       Hotel          @relation(fields: [hotelId], references: [id])
+  chambres    OffreChambre[]
+
+  @@map("offres")
+}
+
+model OffreChambre {
+  offreId   Int
+  chambreId Int
+  offre     Offre   @relation(fields: [offreId], references: [id], onDelete: Cascade)
+  chambre   Chambre @relation(fields: [chambreId], references: [id], onDelete: Cascade)
+
+  @@id([offreId, chambreId])
+  @@map("offres_chambres")
+}
+
+model Avis {
+  id              Int         @id @default(autoincrement())
+  reservationId   Int
+  note            Int
+  commentaire     String?
+  datePublication DateTime    @default(now())
+  valide          Boolean     @default(false)
+  reservation     Reservation @relation(fields: [reservationId], references: [id])
+
+  @@map("avis")
+}
+
+model Notification {
+  id         Int              @id @default(autoincrement())
+  accountId  Int
+  message    String
+  type       TypeNotification
+  dateEnvoi  DateTime         @default(now())
+  lu         Boolean          @default(false)
+  account    Account          @relation(fields: [accountId], references: [id])
+
+  @@map("notifications")
+}
+
+model Reclamation {
+  id              Int               @id @default(autoincrement())
+  reservationId   Int
+  agenceVoyageId  Int
+  sujet           String
+  description     String
+  dateOuverture   DateTime          @default(now())
+  dateResolution  DateTime?
+  reponseAgence   String?
+  statut          StatutReclamation @default(OUVERTE)
+  reservation     Reservation       @relation(fields: [reservationId], references: [id])
+  agenceVoyage    AgenceVoyage      @relation(fields: [agenceVoyageId], references: [id])
+
+  @@map("reclamations")
+}
+
+model ConditionAnnulation {
+  id                  Int          @id @default(autoincrement())
+  delaiLimiteHeures   Int
+  fraisAnnulation     Float
+  remboursementTotal  Boolean      @default(false)
+  description         String?
+  systemConfigId      Int
+  systemConfig        SystemConfig @relation(fields: [systemConfigId], references: [id])
+
+  @@map("conditions_annulation")
+}
+
+model SystemConfig {
+  id                   Int                   @id @default(autoincrement())
+  cle                  String                @unique
+  valeur               String
+  description          String?
+  conditionsAnnulation ConditionAnnulation[]
+
+  @@map("system_configs")
+}

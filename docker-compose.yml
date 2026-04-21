@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: ihm_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ihm
+    volumes:
+      - ./postgres-data:/var/lib/postgresql/data
+    networks:
+      - ihm-network
+    # Intentionally not publishing Postgres port to host — not public
+
+  api:
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    image: wissemhajbi/ihm-api:latest
+    container_name: ihm_api
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: 'postgresql://postgres:postgres@db:5432/ihm?schema=public'
+    ports:
+      - '3000:3000'
+    networks:
+      - ihm-network
+
+networks:
+  ihm-network:
+    driver: bridge
