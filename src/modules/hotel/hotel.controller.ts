@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, ParseIntPipe, Query } from '@nestjs/common';
 import { HotelService } from './hotel.service';
 import { CreateHotelDto } from './dto/create-hotel.dto';
 import { UpdateHotelDto } from './dto/update-hotel.dto';
@@ -15,6 +15,23 @@ export class HotelController {
   @Get()
   findAll() {
     return this.hotelService.findAll();
+  }
+
+  @Get('search/availability')
+  findAvailable(
+    @Query('city') city?: string,
+    @Query('checkIn') checkIn?: string,
+    @Query('checkOut') checkOut?: string,
+    @Query('guests') guests?: string,
+    @Query('rooms') rooms?: string,
+  ) {
+    return this.hotelService.findAvailable({
+      city,
+      checkIn,
+      checkOut,
+      guests: guests ? Number.parseInt(guests, 10) : undefined,
+      rooms: rooms ? Number.parseInt(rooms, 10) : undefined,
+    });
   }
 
   @Get(':id')
