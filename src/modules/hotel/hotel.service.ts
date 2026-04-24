@@ -15,6 +15,16 @@ export class HotelService {
     StatutReservation.TERMINEE,
   ];
 
+  private parseDateInput(value: string) {
+    const parsed = new Date(`${value}T00:00:00`);
+
+    if (Number.isNaN(parsed.getTime())) {
+      throw new BadRequestException('Invalid date format');
+    }
+
+    return parsed;
+  }
+
   create(dto: CreateHotelDto) {
     return this.prisma.hotel.create({ data: dto });
   }
@@ -51,12 +61,8 @@ export class HotelService {
     let endDate: Date | null = null;
 
     if (filters.checkIn && filters.checkOut) {
-      startDate = new Date(filters.checkIn);
-      endDate = new Date(filters.checkOut);
-
-      if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
-        throw new BadRequestException('Invalid date format');
-      }
+      startDate = this.parseDateInput(filters.checkIn);
+      endDate = this.parseDateInput(filters.checkOut);
 
       if (endDate <= startDate) {
         throw new BadRequestException('checkOut must be after checkIn');
