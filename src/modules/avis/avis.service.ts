@@ -8,17 +8,53 @@ export class AvisService {
   constructor(private readonly prisma: PrismaService) {}
 
   create(dto: CreateAvisDto) {
-    return this.prisma.avis.create({ data: dto });
+    const { reservationId, hotelId, accountId, ...rest } = dto;
+    return this.prisma.avis.create({
+      data: {
+        ...rest,
+        accountId,
+        ...(reservationId != null && {
+          reservation: { connect: { id: reservationId } },
+        }),
+        ...(hotelId != null && {
+          hotel: { connect: { id: hotelId } },
+        }),
+      },
+      include: {
+        reservation: {
+          include: {
+            account: { include: { profile: true } },
+            chambre: true,
+          },
+        },
+      },
+    });
   }
 
   findAll() {
-    return this.prisma.avis.findMany({ include: { reservation: true } });
+    return this.prisma.avis.findMany({
+      include: {
+        reservation: {
+          include: {
+            account: { include: { profile: true } },
+            chambre: true,
+          },
+        },
+      },
+    });
   }
 
   findOne(id: number) {
     return this.prisma.avis.findUnique({
       where: { id },
-      include: { reservation: true },
+      include: {
+        reservation: {
+          include: {
+            account: { include: { profile: true } },
+            chambre: true,
+          },
+        },
+      },
     });
   }
 
@@ -28,15 +64,31 @@ export class AvisService {
 
   findByHotel(hotelId: number) {
     return this.prisma.avis.findMany({
-      where: { reservation: { chambre: { hotelId } } },
-      include: { reservation: true },
+      where: {
+        OR: [{ reservation: { chambre: { hotelId } } }, { hotelId }],
+      },
+      include: {
+        reservation: {
+          include: {
+            account: { include: { profile: true } },
+            chambre: true,
+          },
+        },
+      },
     });
   }
 
   findByAccount(accountId: number) {
     return this.prisma.avis.findMany({
       where: { reservation: { accountId } },
-      include: { reservation: true },
+      include: {
+        reservation: {
+          include: {
+            account: { include: { profile: true } },
+            chambre: true,
+          },
+        },
+      },
     });
   }
 

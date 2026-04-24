@@ -2,7 +2,20 @@ import { IsInt, IsString, IsBoolean, IsOptional, Min, Max } from 'class-validato
 
 export class CreateAvisDto {
   @IsInt()
-  reservationId: number;
+  @IsOptional()
+  reservationId?: number;
+
+  @IsInt()
+  @IsOptional()
+  hotelId?: number;
+
+  @IsString()
+  @IsOptional()
+  authorName?: string;
+
+  @IsInt()
+  @IsOptional()
+  accountId?: number;
 
   @IsInt()
   @Min(1)
@@ -17,3 +30,4 @@ export class CreateAvisDto {
   @IsOptional()
   valide?: boolean;
 }
+

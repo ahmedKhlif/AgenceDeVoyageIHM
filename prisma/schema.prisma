@@ -94,6 +94,7 @@ model Hotel {
   agenceVoyage   AgenceVoyage @relation(fields: [agenceVoyageId], references: [id])
   chambres       Chambre[]
   offres         Offre[]
+  avis           Avis[]
 
   @@map("hotels")
 }
@@ -177,13 +178,17 @@ model OffreChambre {
 }
 
 model Avis {
-  id              Int         @id @default(autoincrement())
-  reservationId   Int
+  id              Int          @id @default(autoincrement())
+  reservationId   Int?
+  hotelId         Int?
+  accountId       Int?
+  authorName      String?
   note            Int
   commentaire     String?
-  datePublication DateTime    @default(now())
-  valide          Boolean     @default(false)
-  reservation     Reservation @relation(fields: [reservationId], references: [id])
+  datePublication DateTime     @default(now())
+  valide          Boolean      @default(false)
+  reservation     Reservation? @relation(fields: [reservationId], references: [id])
+  hotel           Hotel?       @relation(fields: [hotelId], references: [id])
 
   @@map("avis")
 }
