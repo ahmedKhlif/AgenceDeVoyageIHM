@@ -21,6 +21,11 @@ export class CreateOffreDto {
   @IsOptional()
   active?: boolean;
 
+  @IsString()
+  @IsOptional()
+  photo?: string;
+
   @IsInt()
   hotelId: number;
 }
+

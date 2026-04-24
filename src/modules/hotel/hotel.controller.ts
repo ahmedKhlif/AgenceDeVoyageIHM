@@ -17,6 +17,11 @@ export class HotelController {
     return this.hotelService.findAll();
   }
 
+  @Get('destinations')
+  getDestinations() {
+    return this.hotelService.getDestinations();
+  }
+
   @Get('search/availability')
   findAvailable(
     @Query('city') city?: string,

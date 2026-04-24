@@ -12,13 +12,35 @@ export class OffreService {
   }
 
   findAll() {
-    return this.prisma.offre.findMany({ include: { hotel: true, chambres: { include: { chambre: true } } } });
+    return this.prisma.offre.findMany({
+      include: {
+        hotel: {
+          include: {
+            chambres: {
+              select: { photos: true },
+              take: 3,
+            },
+          },
+        },
+        chambres: { include: { chambre: true } },
+      },
+    });
   }
 
   findOne(id: number) {
     return this.prisma.offre.findUnique({
       where: { id },
-      include: { hotel: true, chambres: { include: { chambre: true } } },
+      include: {
+        hotel: {
+          include: {
+            chambres: {
+              select: { photos: true },
+              take: 3,
+            },
+          },
+        },
+        chambres: { include: { chambre: true } },
+      },
     });
   }
 

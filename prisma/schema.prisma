@@ -153,6 +153,7 @@ model Offre {
   id          Int            @id @default(autoincrement())
   titre       String
   description String?
+  photo       String?
   tauxRemise  Float
   dateDebut   DateTime
   dateFin     DateTime
@@ -163,6 +164,7 @@ model Offre {
 
   @@map("offres")
 }
+
 
 model OffreChambre {
   offreId   Int

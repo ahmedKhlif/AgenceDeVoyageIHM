@@ -134,4 +134,15 @@ export class HotelService {
   remove(id: number) {
     return this.prisma.hotel.delete({ where: { id } });
   }
+
+  /** Returns cities with active hotel counts, ordered by count descending */
+  async getDestinations(): Promise<{ ville: string; count: number }[]> {
+    const cities = await this.prisma.hotel.groupBy({
+      by: ['ville'],
+      where: { actif: true },
+      _count: { _all: true },
+      orderBy: { _count: { ville: 'desc' } },
+    });
+    return cities.map((c) => ({ ville: c.ville, count: c._count._all }));
+  }
 }
