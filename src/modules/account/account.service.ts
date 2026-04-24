@@ -48,6 +48,34 @@ export class AccountService {
     return result;
   }
 
+  async googleLogin(data: { email: string; firstName: string; lastName: string; uid: string }) {
+    let account = await this.prisma.account.findUnique({
+      where: { email: data.email },
+      include: { profile: true },
+    });
+
+    if (!account) {
+      // Create new account with dummy password
+      const dummyPassword = await bcrypt.hash(data.uid + Math.random().toString(), 10);
+      account = await this.prisma.account.create({
+        data: {
+          email: data.email,
+          motDePasse: dummyPassword,
+          profile: {
+            create: {
+              nom: data.lastName || '',
+              prenom: data.firstName || 'Google User',
+            }
+          }
+        },
+        include: { profile: true },
+      });
+    }
+
+    const { motDePasse, ...result } = account;
+    return result;
+  }
+
   async getProfile(accountId: number) {
     return this.prisma.profile.findUnique({
       where: { accountId }
