@@ -2,6 +2,9 @@ import { Controller, Get, Post, Body, Patch, Param, Delete, ParseIntPipe } from 
 import { AccountService } from './account.service';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
+import { UpdateProfileDto } from '../profile/dto/update-profile.dto';
+import { CreatePaymentMethodDto } from './dto/create-payment-method.dto';
+import { UpdatePaymentMethodDto } from './dto/update-payment-method.dto';
 
 @Controller('accounts')
 export class AccountController {
@@ -38,8 +41,41 @@ export class AccountController {
   }
 
   @Patch(':accountId/profile')
-  updateProfile(@Param('accountId', ParseIntPipe) accountId: number, @Body() data: any) {
+  updateProfile(
+    @Param('accountId', ParseIntPipe) accountId: number,
+    @Body() data: UpdateProfileDto,
+  ) {
     return this.accountService.updateProfile(accountId, data);
+  }
+
+  @Get(':accountId/payment-methods')
+  listPaymentMethods(@Param('accountId', ParseIntPipe) accountId: number) {
+    return this.accountService.listPaymentMethods(accountId);
+  }
+
+  @Post(':accountId/payment-methods')
+  createPaymentMethod(
+    @Param('accountId', ParseIntPipe) accountId: number,
+    @Body() dto: CreatePaymentMethodDto,
+  ) {
+    return this.accountService.createPaymentMethod(accountId, dto);
+  }
+
+  @Patch(':accountId/payment-methods/:paymentMethodId')
+  updatePaymentMethod(
+    @Param('accountId', ParseIntPipe) accountId: number,
+    @Param('paymentMethodId', ParseIntPipe) paymentMethodId: number,
+    @Body() dto: UpdatePaymentMethodDto,
+  ) {
+    return this.accountService.updatePaymentMethod(accountId, paymentMethodId, dto);
+  }
+
+  @Delete(':accountId/payment-methods/:paymentMethodId')
+  removePaymentMethod(
+    @Param('accountId', ParseIntPipe) accountId: number,
+    @Param('paymentMethodId', ParseIntPipe) paymentMethodId: number,
+  ) {
+    return this.accountService.removePaymentMethod(accountId, paymentMethodId);
   }
 
   @Patch(':accountId/change-password')

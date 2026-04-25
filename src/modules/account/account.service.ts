@@ -1,7 +1,10 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
+import { UpdateProfileDto } from '../profile/dto/update-profile.dto';
+import { CreatePaymentMethodDto } from './dto/create-payment-method.dto';
+import { UpdatePaymentMethodDto } from './dto/update-payment-method.dto';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -78,14 +81,138 @@ export class AccountService {
 
   async getProfile(accountId: number) {
     return this.prisma.profile.findUnique({
-      where: { accountId }
+      where: { accountId },
+      include: {
+        account: {
+          select: {
+            paymentMethods: {
+              orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }],
+            },
+          },
+        },
+      },
     });
   }
 
-  async updateProfile(accountId: number, data: any) {
-    return this.prisma.profile.update({
+  async updateProfile(accountId: number, data: UpdateProfileDto) {
+    const account = await this.prisma.account.findUnique({
+      where: { id: accountId },
+    });
+
+    if (!account) {
+      throw new NotFoundException('Account not found');
+    }
+
+    const { accountId: _ignored, ...profileData } = this.normalizeProfileData(data);
+
+    return this.prisma.profile.upsert({
       where: { accountId },
-      data
+      update: profileData,
+      create: {
+        accountId,
+        ...profileData,
+        nom: profileData.nom?.trim() || 'User',
+        prenom: profileData.prenom?.trim() || 'Guest',
+      },
+      include: {
+        account: {
+          select: {
+            paymentMethods: {
+              orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }],
+            },
+          },
+        },
+      },
+    });
+  }
+
+  async listPaymentMethods(accountId: number) {
+    return this.prisma.paymentMethod.findMany({
+      where: { accountId },
+      orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }],
+    });
+  }
+
+  async createPaymentMethod(accountId: number, dto: CreatePaymentMethodDto) {
+    await this.ensureAccountExists(accountId);
+
+    return this.prisma.$transaction(async (tx) => {
+      const existingCount = await tx.paymentMethod.count({ where: { accountId } });
+      const shouldBeDefault = dto.isDefault ?? existingCount === 0;
+
+      if (shouldBeDefault) {
+        await tx.paymentMethod.updateMany({
+          where: { accountId, isDefault: true },
+          data: { isDefault: false },
+        });
+      }
+
+      return tx.paymentMethod.create({
+        data: {
+          accountId,
+          cardholderName: dto.cardholderName.trim(),
+          brand: dto.brand,
+          last4: dto.cardNumber.slice(-4),
+          expiryMonth: dto.expiryMonth,
+          expiryYear: dto.expiryYear,
+          isDefault: shouldBeDefault,
+        },
+      });
+    });
+  }
+
+  async updatePaymentMethod(
+    accountId: number,
+    paymentMethodId: number,
+    dto: UpdatePaymentMethodDto,
+  ) {
+    await this.ensurePaymentMethodOwnership(accountId, paymentMethodId);
+
+    return this.prisma.$transaction(async (tx) => {
+      const shouldBeDefault = dto.isDefault === true;
+
+      if (shouldBeDefault) {
+        await tx.paymentMethod.updateMany({
+          where: { accountId, isDefault: true, NOT: { id: paymentMethodId } },
+          data: { isDefault: false },
+        });
+      }
+
+      return tx.paymentMethod.update({
+        where: { id: paymentMethodId },
+        data: {
+          ...(dto.cardholderName !== undefined && {
+            cardholderName: dto.cardholderName.trim(),
+          }),
+          ...(dto.brand !== undefined && { brand: dto.brand }),
+          ...(dto.cardNumber !== undefined && { last4: dto.cardNumber.slice(-4) }),
+          ...(dto.expiryMonth !== undefined && { expiryMonth: dto.expiryMonth }),
+          ...(dto.expiryYear !== undefined && { expiryYear: dto.expiryYear }),
+          ...(dto.isDefault !== undefined && { isDefault: dto.isDefault }),
+        },
+      });
+    });
+  }
+
+  async removePaymentMethod(accountId: number, paymentMethodId: number) {
+    const existing = await this.ensurePaymentMethodOwnership(accountId, paymentMethodId);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.paymentMethod.delete({ where: { id: paymentMethodId } });
+
+      if (existing.isDefault) {
+        const fallback = await tx.paymentMethod.findFirst({
+          where: { accountId },
+          orderBy: { createdAt: 'asc' },
+        });
+
+        if (fallback) {
+          await tx.paymentMethod.update({
+            where: { id: fallback.id },
+            data: { isDefault: true },
+          });
+        }
+      }
     });
   }
 
@@ -111,5 +238,41 @@ export class AccountService {
       where: { id: accountId },
       data: { motDePasse: hashedPassword }
     });
+  }
+
+  private async ensureAccountExists(accountId: number) {
+    const account = await this.prisma.account.findUnique({ where: { id: accountId } });
+
+    if (!account) {
+      throw new NotFoundException('Account not found');
+    }
+  }
+
+  private async ensurePaymentMethodOwnership(accountId: number, paymentMethodId: number) {
+    const paymentMethod = await this.prisma.paymentMethod.findFirst({
+      where: { id: paymentMethodId, accountId },
+    });
+
+    if (!paymentMethod) {
+      throw new NotFoundException('Payment method not found');
+    }
+
+    return paymentMethod;
+  }
+
+  private normalizeProfileData<T extends { dateNaissance?: string | Date | null }>(data: T): T {
+    if (!data.dateNaissance) {
+      return data;
+    }
+
+    const normalizedDate =
+      typeof data.dateNaissance === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(data.dateNaissance)
+        ? new Date(`${data.dateNaissance}T00:00:00.000Z`)
+        : data.dateNaissance;
+
+    return {
+      ...data,
+      dateNaissance: normalizedDate,
+    };
   }
 }

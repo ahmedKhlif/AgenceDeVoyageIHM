@@ -44,6 +44,7 @@ model Account {
   profile         Profile?
   reservations    Reservation[]
   notifications   Notification[]
+  paymentMethods  PaymentMethod[]
 
   @@map("accounts")
 }
@@ -57,11 +58,32 @@ model Profile {
   adresse     String?
   nationalite String?
   photo       String?
+  dateNaissance DateTime?
+  numeroPasseport String?
+  bio         String?
+  destinationsPreferees String[] @default([])
+  preferencesVoyage String[] @default([])
   notificationsReservation Boolean @default(true)
   notificationsPromotion   Boolean @default(false)
   account     Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@map("profiles")
+}
+
+model PaymentMethod {
+  id             Int      @id @default(autoincrement())
+  accountId      Int
+  cardholderName String
+  brand          String
+  last4          String
+  expiryMonth    Int
+  expiryYear     Int
+  isDefault      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  account        Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@map("payment_methods")
 }
 
 model AgenceVoyage {
