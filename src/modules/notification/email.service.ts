@@ -22,7 +22,7 @@ export class EmailService {
     const user = this.config.get<string>('SMTP_USER') || '';
     const pass = this.config.get<string>('SMTP_PASS') || '';
 
-    this.fromEmail = this.config.get<string>('SMTP_FROM') || 'VoyageHub <noreply@voyagehub.com>';
+    this.fromEmail = this.config.get<string>('SMTP_FROM') || 'aminc571@gmail.com';
 
     this.transporter = nodemailer.createTransport({
       host,
@@ -46,4 +46,3 @@ export class EmailService {
     }
   }
 }
-

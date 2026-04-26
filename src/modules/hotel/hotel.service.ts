@@ -45,6 +45,19 @@ export class HotelService {
   }
 
   async create(dto: CreateHotelDto) {
+    const agency = await this.prisma.agenceVoyage.findUnique({
+      where: { id: dto.agenceVoyageId },
+      select: { id: true, actif: true },
+    });
+
+    if (!agency) {
+      throw new BadRequestException('Invalid agenceVoyageId: agency not found');
+    }
+
+    if (!agency.actif) {
+      throw new BadRequestException('Selected agency is inactive');
+    }
+
     const hotel = await this.prisma.hotel.create({ data: dto });
 
     await this.notificationService.notifyNewHotel({
@@ -340,7 +353,22 @@ export class HotelService {
     return { items, total, page, limit, totalPages };
   }
 
-  update(id: number, dto: UpdateHotelDto) {
+  async update(id: number, dto: UpdateHotelDto) {
+    if (dto.agenceVoyageId !== undefined) {
+      const agency = await this.prisma.agenceVoyage.findUnique({
+        where: { id: dto.agenceVoyageId },
+        select: { id: true, actif: true },
+      });
+
+      if (!agency) {
+        throw new BadRequestException('Invalid agenceVoyageId: agency not found');
+      }
+
+      if (!agency.actif) {
+        throw new BadRequestException('Selected agency is inactive');
+      }
+    }
+
     return this.prisma.hotel.update({ where: { id }, data: dto });
   }
 
