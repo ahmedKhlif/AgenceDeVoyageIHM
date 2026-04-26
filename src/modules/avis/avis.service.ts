@@ -7,11 +7,14 @@ import { UpdateAvisDto } from './dto/update-avis.dto';
 export class AvisService {
   constructor(private readonly prisma: PrismaService) {}
 
-  create(dto: CreateAvisDto) {
-    const { reservationId, hotelId, accountId, ...rest } = dto;
+  async create(dto: CreateAvisDto) {
+    const { reservationId, hotelId, accountId, authorName, ...rest } = dto;
+    const resolvedAuthorName = await this.resolveAuthorName(authorName, accountId);
+
     return this.prisma.avis.create({
       data: {
         ...rest,
+        ...(resolvedAuthorName ? { authorName: resolvedAuthorName } : {}),
         accountId,
         ...(reservationId != null && {
           reservation: { connect: { id: reservationId } },
@@ -31,8 +34,8 @@ export class AvisService {
     });
   }
 
-  findAll() {
-    return this.prisma.avis.findMany({
+  async findAll() {
+    const reviews = await this.prisma.avis.findMany({
       include: {
         reservation: {
           include: {
@@ -42,10 +45,12 @@ export class AvisService {
         },
       },
     });
+
+    return this.hydrateAuthorNames(reviews);
   }
 
-  findOne(id: number) {
-    return this.prisma.avis.findUnique({
+  async findOne(id: number) {
+    const review = await this.prisma.avis.findUnique({
       where: { id },
       include: {
         reservation: {
@@ -56,14 +61,21 @@ export class AvisService {
         },
       },
     });
+
+    if (!review) {
+      return null;
+    }
+
+    const [normalized] = await this.hydrateAuthorNames([review]);
+    return normalized;
   }
 
   findByReservation(reservationId: number) {
     return this.prisma.avis.findMany({ where: { reservationId } });
   }
 
-  findByHotel(hotelId: number) {
-    return this.prisma.avis.findMany({
+  async findByHotel(hotelId: number) {
+    const reviews = await this.prisma.avis.findMany({
       where: {
         OR: [{ reservation: { chambre: { hotelId } } }, { hotelId }],
       },
@@ -76,11 +88,15 @@ export class AvisService {
         },
       },
     });
+
+    return this.hydrateAuthorNames(reviews);
   }
 
-  findByAccount(accountId: number) {
-    return this.prisma.avis.findMany({
-      where: { reservation: { accountId } },
+  async findByAccount(accountId: number) {
+    const reviews = await this.prisma.avis.findMany({
+      where: {
+        OR: [{ reservation: { accountId } }, { accountId }],
+      },
       include: {
         reservation: {
           include: {
@@ -90,6 +106,8 @@ export class AvisService {
         },
       },
     });
+
+    return this.hydrateAuthorNames(reviews);
   }
 
   update(id: number, dto: UpdateAvisDto) {
@@ -98,5 +116,99 @@ export class AvisService {
 
   remove(id: number) {
     return this.prisma.avis.delete({ where: { id } });
+  }
+
+  private normalizeAuthorName(authorName?: string | null) {
+    const value = authorName?.trim();
+    if (!value) {
+      return undefined;
+    }
+
+    const lowered = value.toLowerCase();
+    if (
+      lowered === 'undefined' ||
+      lowered === 'undefined undefined' ||
+      lowered === 'null' ||
+      lowered === 'null null'
+    ) {
+      return undefined;
+    }
+
+    return value;
+  }
+
+  private async resolveProfileName(accountId?: number | null) {
+    if (!accountId) {
+      return undefined;
+    }
+
+    const profile = await this.prisma.profile.findUnique({
+      where: { accountId },
+      select: { prenom: true, nom: true },
+    });
+
+    if (!profile) {
+      return undefined;
+    }
+
+    const fullName = `${profile.prenom?.trim() ?? ''} ${profile.nom?.trim() ?? ''}`.trim();
+    return fullName || undefined;
+  }
+
+  private async resolveAuthorName(authorName?: string | null, accountId?: number | null) {
+    return this.normalizeAuthorName(authorName) || (await this.resolveProfileName(accountId));
+  }
+
+  private async hydrateAuthorNames<
+    T extends {
+      authorName?: string | null;
+      accountId?: number | null;
+    },
+  >(reviews: T[]) {
+    const missingAccountIds = Array.from(
+      new Set(
+        reviews
+          .filter((review) => !this.normalizeAuthorName(review.authorName) && !!review.accountId)
+          .map((review) => Number(review.accountId)),
+      ),
+    );
+
+    if (missingAccountIds.length === 0) {
+      return reviews;
+    }
+
+    const profiles = await this.prisma.profile.findMany({
+      where: {
+        accountId: { in: missingAccountIds },
+      },
+      select: {
+        accountId: true,
+        prenom: true,
+        nom: true,
+      },
+    });
+
+    const nameByAccountId = new Map(
+      profiles.map((profile) => {
+        const fullName = `${profile.prenom?.trim() ?? ''} ${profile.nom?.trim() ?? ''}`.trim();
+        return [profile.accountId, fullName];
+      }),
+    );
+
+    return reviews.map((review) => {
+      if (this.normalizeAuthorName(review.authorName) || !review.accountId) {
+        return review;
+      }
+
+      const resolvedName = nameByAccountId.get(Number(review.accountId));
+      if (!resolvedName) {
+        return review;
+      }
+
+      return {
+        ...review,
+        authorName: resolvedName,
+      };
+    });
   }
 }
