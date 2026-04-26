@@ -387,10 +387,40 @@ export class ReservationService {
     };
   }
 
-  findAll() {
-    return this.prisma.reservation.findMany({
-      include: { account: { include: { profile: true } }, chambre: true },
-    });
+  async findAll(options?: { page?: number; limit?: number }) {
+    const hasPagination =
+      Number.isFinite(options?.page) &&
+      Number.isFinite(options?.limit) &&
+      (options?.page ?? 0) > 0 &&
+      (options?.limit ?? 0) > 0;
+
+    if (!hasPagination) {
+      return this.prisma.reservation.findMany({
+        include: { account: { include: { profile: true } }, chambre: true },
+      });
+    }
+
+    const page = options!.page!;
+    const limit = options!.limit!;
+    const skip = (page - 1) * limit;
+
+    const [items, total] = await Promise.all([
+      this.prisma.reservation.findMany({
+        include: { account: { include: { profile: true } }, chambre: true },
+        orderBy: { dateCreation: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.reservation.count(),
+    ]);
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    };
   }
 
   findOne(id: number) {
@@ -405,11 +435,42 @@ export class ReservationService {
     });
   }
 
-  findByAccount(accountId: number) {
-    return this.prisma.reservation.findMany({
-      where: { accountId },
-      include: { chambre: { include: { hotel: true } } },
-    });
+  async findByAccount(accountId: number, options?: { page?: number; limit?: number }) {
+    const hasPagination =
+      Number.isFinite(options?.page) &&
+      Number.isFinite(options?.limit) &&
+      (options?.page ?? 0) > 0 &&
+      (options?.limit ?? 0) > 0;
+
+    if (!hasPagination) {
+      return this.prisma.reservation.findMany({
+        where: { accountId },
+        include: { chambre: { include: { hotel: true } } },
+      });
+    }
+
+    const page = options!.page!;
+    const limit = options!.limit!;
+    const skip = (page - 1) * limit;
+
+    const [items, total] = await Promise.all([
+      this.prisma.reservation.findMany({
+        where: { accountId },
+        include: { chambre: { include: { hotel: true } } },
+        orderBy: { dateCreation: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.reservation.count({ where: { accountId } }),
+    ]);
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    };
   }
 
   update(id: number, dto: UpdateReservationDto) {

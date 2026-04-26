@@ -36,8 +36,40 @@ export class HotelService {
     return this.prisma.hotel.create({ data: dto });
   }
 
-  findAll() {
-    return this.prisma.hotel.findMany({ include: { chambres: true, offres: true } });
+  async findAll(options?: { page?: number; limit?: number }) {
+    const hasPagination =
+      Number.isFinite(options?.page) &&
+      Number.isFinite(options?.limit) &&
+      (options?.page ?? 0) > 0 &&
+      (options?.limit ?? 0) > 0;
+
+    if (!hasPagination) {
+      return this.prisma.hotel.findMany({ include: { chambres: true, offres: true } });
+    }
+
+    const page = options!.page!;
+    const limit = options!.limit!;
+    const skip = (page - 1) * limit;
+
+    const [items, total] = await Promise.all([
+      this.prisma.hotel.findMany({
+        include: { chambres: true, offres: true },
+        orderBy: { id: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.hotel.count(),
+    ]);
+
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages,
+    };
   }
 
   findOne(id: number) {

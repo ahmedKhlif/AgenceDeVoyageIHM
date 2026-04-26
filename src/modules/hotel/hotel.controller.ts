@@ -14,8 +14,16 @@ export class HotelController {
   }
 
   @Get()
-  findAll() {
-    return this.hotelService.findAll();
+  findAll(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const parsedPage = page ? Number.parseInt(page, 10) : undefined;
+    const parsedLimit = limit ? Number.parseInt(limit, 10) : undefined;
+    return this.hotelService.findAll({
+      page: Number.isFinite(parsedPage) ? parsedPage : undefined,
+      limit: Number.isFinite(parsedLimit) ? parsedLimit : undefined,
+    });
   }
 
   @Get('destinations')

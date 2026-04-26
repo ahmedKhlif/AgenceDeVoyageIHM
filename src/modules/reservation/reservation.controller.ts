@@ -13,9 +13,20 @@ export class ReservationController {
   }
 
   @Get()
-  findAll(@Query('accountId') accountId?: string) {
-    if (accountId) return this.reservationService.findByAccount(+accountId);
-    return this.reservationService.findAll();
+  findAll(
+    @Query('accountId') accountId?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const parsedPage = page ? Number.parseInt(page, 10) : undefined;
+    const parsedLimit = limit ? Number.parseInt(limit, 10) : undefined;
+    const pagination = {
+      page: Number.isFinite(parsedPage) ? parsedPage : undefined,
+      limit: Number.isFinite(parsedLimit) ? parsedLimit : undefined,
+    };
+
+    if (accountId) return this.reservationService.findByAccount(+accountId, pagination);
+    return this.reservationService.findAll(pagination);
   }
 
   @Get(':id')
