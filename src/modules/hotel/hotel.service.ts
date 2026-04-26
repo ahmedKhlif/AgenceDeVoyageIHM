@@ -3,10 +3,12 @@ import { StatutReservation } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateHotelDto } from './dto/create-hotel.dto';
 import { UpdateHotelDto } from './dto/update-hotel.dto';
+import { CheckAvailabilityDto } from './dto/check-availability.dto';
 
 @Injectable()
 export class HotelService {
   constructor(private readonly prisma: PrismaService) {}
+  private readonly cityTaxPerNight = 5;
 
   private readonly blockingStatuses = [
     StatutReservation.EN_ATTENTE,
@@ -25,6 +27,11 @@ export class HotelService {
     return parsed;
   }
 
+  private differenceInNights(checkIn: Date, checkOut: Date) {
+    const diffInMs = checkOut.getTime() - checkIn.getTime();
+    return Math.max(1, Math.round(diffInMs / (1000 * 60 * 60 * 24)));
+  }
+
   create(dto: CreateHotelDto) {
     return this.prisma.hotel.create({ data: dto });
   }
@@ -38,6 +45,87 @@ export class HotelService {
       where: { id },
       include: { chambres: { include: { typeChambre: true } }, offres: true },
     });
+  }
+
+  async checkAvailability(id: number, dto: CheckAvailabilityDto) {
+    const checkIn = this.parseDateInput(dto.checkIn);
+    const checkOut = this.parseDateInput(dto.checkOut);
+
+    if (checkOut <= checkIn) {
+      throw new BadRequestException('checkOut must be after checkIn');
+    }
+
+    const adults = Number.isFinite(dto.adults) ? Math.max(1, dto.adults) : 1;
+    const children = Number.isFinite(dto.children) ? Math.max(0, dto.children) : 0;
+    const totalGuests = adults + children;
+
+    if (totalGuests < 1) {
+      throw new BadRequestException('At least one guest is required');
+    }
+
+    const hotel = await this.prisma.hotel.findUnique({
+      where: { id },
+      include: {
+        chambres: {
+          include: {
+            typeChambre: true,
+            reservations: {
+              where: {
+                statut: { in: this.blockingStatuses },
+                dateArrivee: { lt: checkOut },
+                dateDepart: { gt: checkIn },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!hotel || !hotel.actif) {
+      throw new BadRequestException('Hotel not found');
+    }
+
+    const matchingRooms = hotel.chambres
+      .filter(
+        (room) =>
+          room.disponible &&
+          room.capacite >= totalGuests &&
+          room.reservations.length === 0,
+      )
+      .map((room) => ({
+        id: room.id,
+        hotelId: room.hotelId,
+        title: room.typeChambre?.libelle ?? `Room ${room.numero}`,
+        maxGuests: room.capacite,
+        bedType: room.typeChambre?.description?.trim() || '1 King Size Bed',
+        roomSize: Math.round(room.typeChambre?.superficieM2 ?? 32),
+        pricePerNight: room.prixParNuit,
+        image:
+          room.photos?.[0] ||
+          'https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=400&q=80',
+      }))
+      .sort((a, b) => a.pricePerNight - b.pricePerNight);
+
+    const nights = this.differenceInNights(checkIn, checkOut);
+    const selectedPricePerNight = matchingRooms[0]?.pricePerNight ?? 0;
+    const basePrice = selectedPricePerNight * nights;
+    const cityTax = this.cityTaxPerNight * nights;
+    const total = basePrice + cityTax;
+
+    return {
+      available: matchingRooms.length > 0,
+      nights,
+      basePrice,
+      cityTax,
+      total,
+      rooms: matchingRooms,
+      selectedPricePerNight,
+      guests: {
+        adults,
+        children,
+        total: totalGuests,
+      },
+    };
   }
 
   async findAvailable(filters: {

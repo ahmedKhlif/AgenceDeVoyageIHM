@@ -2,6 +2,7 @@ import { Controller, Get, Post, Body, Patch, Param, Delete, ParseIntPipe, Query 
 import { HotelService } from './hotel.service';
 import { CreateHotelDto } from './dto/create-hotel.dto';
 import { UpdateHotelDto } from './dto/update-hotel.dto';
+import { CheckAvailabilityDto } from './dto/check-availability.dto';
 
 @Controller('hotels')
 export class HotelController {
@@ -42,6 +43,14 @@ export class HotelController {
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.hotelService.findOne(id);
+  }
+
+  @Post(':id/check-availability')
+  checkAvailability(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CheckAvailabilityDto,
+  ) {
+    return this.hotelService.checkAvailability(id, dto);
   }
 
   @Patch(':id')
