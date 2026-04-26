@@ -17,16 +17,20 @@ export class ReservationController {
     @Query('accountId') accountId?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
+    @Query('status') status?: string,
+    @Query('search') search?: string,
   ) {
     const parsedPage = page ? Number.parseInt(page, 10) : undefined;
     const parsedLimit = limit ? Number.parseInt(limit, 10) : undefined;
-    const pagination = {
+    const options = {
       page: Number.isFinite(parsedPage) ? parsedPage : undefined,
       limit: Number.isFinite(parsedLimit) ? parsedLimit : undefined,
+      status: status as any,
+      search,
     };
 
-    if (accountId) return this.reservationService.findByAccount(+accountId, pagination);
-    return this.reservationService.findAll(pagination);
+    if (accountId) return this.reservationService.findByAccount(+accountId, options);
+    return this.reservationService.findAll(options);
   }
 
   @Get(':id')

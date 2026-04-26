@@ -435,17 +435,33 @@ export class ReservationService {
     });
   }
 
-  async findByAccount(accountId: number, options?: { page?: number; limit?: number }) {
+  async findByAccount(
+    accountId: number,
+    options?: { page?: number; limit?: number; status?: StatutReservation; search?: string },
+  ) {
     const hasPagination =
       Number.isFinite(options?.page) &&
       Number.isFinite(options?.limit) &&
       (options?.page ?? 0) > 0 &&
       (options?.limit ?? 0) > 0;
 
+    const where: any = { accountId };
+    if (options?.status) {
+      where.statut = options.status;
+    }
+    if (options?.search) {
+      where.OR = [
+        { codeConfirmation: { contains: options.search, mode: 'insensitive' } },
+        { chambre: { hotel: { nom: { contains: options.search, mode: 'insensitive' } } } },
+        { chambre: { hotel: { ville: { contains: options.search, mode: 'insensitive' } } } },
+      ];
+    }
+
     if (!hasPagination) {
       return this.prisma.reservation.findMany({
-        where: { accountId },
+        where,
         include: { chambre: { include: { hotel: true } } },
+        orderBy: { dateCreation: 'desc' },
       });
     }
 
@@ -455,13 +471,13 @@ export class ReservationService {
 
     const [items, total] = await Promise.all([
       this.prisma.reservation.findMany({
-        where: { accountId },
+        where,
         include: { chambre: { include: { hotel: true } } },
         orderBy: { dateCreation: 'desc' },
         skip,
         take: limit,
       }),
-      this.prisma.reservation.count({ where: { accountId } }),
+      this.prisma.reservation.count({ where }),
     ]);
 
     return {
