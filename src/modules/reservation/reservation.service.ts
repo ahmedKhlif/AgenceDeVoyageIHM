@@ -238,7 +238,7 @@ export class ReservationService {
         nombreNuits: nights,
         montantTotal: total,
         codeConfirmation: bookingReference,
-        statut: StatutReservation.CONFIRMEE,
+        statut: StatutReservation.EN_ATTENTE,
       },
       include: {
         chambre: { include: { hotel: true, typeChambre: true } },
