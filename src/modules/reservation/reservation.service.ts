@@ -4,6 +4,7 @@ import { CreateReservationDto } from './dto/create-reservation.dto';
 import { UpdateReservationDto } from './dto/update-reservation.dto';
 import { StatutReservation } from '@prisma/client';
 import { CreateBookingDto } from './dto/create-booking.dto';
+import { NotificationService } from '../notification/notification.service';
 
 type CancellationEvaluation = {
   allowed: boolean;
@@ -19,7 +20,10 @@ type CancellationEvaluation = {
 
 @Injectable()
 export class ReservationService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationService: NotificationService,
+  ) {}
   private readonly cityTaxPerNight = 5;
   private readonly blockingStatuses = [
     StatutReservation.EN_ATTENTE,
@@ -152,11 +156,26 @@ export class ReservationService {
     return reservation;
   }
 
-  create(dto: CreateReservationDto) {
-    return this.prisma.reservation.create({
+  async create(dto: CreateReservationDto) {
+    const reservation = await this.prisma.reservation.create({
       data: dto,
-      include: { account: true, chambre: true },
+      include: {
+        account: { include: { profile: true } },
+        chambre: { include: { hotel: true } },
+      },
     });
+
+    if (reservation.statut !== StatutReservation.EN_ATTENTE) {
+      await this.notificationService.notifyReservationStatusUpdate({
+        accountId: reservation.accountId,
+        bookingReference: reservation.codeConfirmation,
+        hotelName: reservation.chambre.hotel.nom,
+        status: reservation.statut,
+        checkInDate: reservation.dateArrivee,
+      });
+    }
+
+    return reservation;
   }
 
   async createBooking(dto: CreateBookingDto) {
@@ -238,7 +257,7 @@ export class ReservationService {
         nombreNuits: nights,
         montantTotal: total,
         codeConfirmation: bookingReference,
-        statut: StatutReservation.EN_ATTENTE,
+        statut: StatutReservation.CONFIRMEE,
       },
       include: {
         chambre: { include: { hotel: true, typeChambre: true } },
@@ -259,6 +278,14 @@ export class ReservationService {
         },
       });
     }
+
+    await this.notificationService.notifyReservationStatusUpdate({
+      accountId: account.id,
+      bookingReference: reservation.codeConfirmation,
+      hotelName: reservation.chambre.hotel.nom,
+      status: reservation.statut,
+      checkInDate: reservation.dateArrivee,
+    });
 
     return {
       confirmed: true,
@@ -364,6 +391,14 @@ export class ReservationService {
       include: {
         chambre: { include: { hotel: true, typeChambre: true } },
       },
+    });
+
+    await this.notificationService.notifyReservationStatusUpdate({
+      accountId: reservation.accountId,
+      bookingReference: updated.codeConfirmation,
+      hotelName: updated.chambre.hotel.nom,
+      status: updated.statut,
+      checkInDate: updated.dateArrivee,
     });
 
     return {
@@ -489,15 +524,58 @@ export class ReservationService {
     };
   }
 
-  update(id: number, dto: UpdateReservationDto) {
-    return this.prisma.reservation.update({ where: { id }, data: dto });
+  async update(id: number, dto: UpdateReservationDto) {
+    const current = await this.prisma.reservation.findUnique({
+      where: { id },
+      include: {
+        chambre: {
+          include: {
+            hotel: true,
+          },
+        },
+      },
+    });
+
+    const updated = await this.prisma.reservation.update({
+      where: { id },
+      data: dto,
+      include: {
+        account: { include: { profile: true } },
+        chambre: { include: { hotel: true, typeChambre: true } },
+      },
+    });
+
+    if (current && dto.statut && dto.statut !== current.statut) {
+      await this.notificationService.notifyReservationStatusUpdate({
+        accountId: updated.accountId,
+        bookingReference: updated.codeConfirmation,
+        hotelName: updated.chambre.hotel.nom,
+        status: updated.statut,
+        checkInDate: updated.dateArrivee,
+      });
+    }
+
+    return updated;
   }
 
-  updateStatut(id: number, statut: StatutReservation, motifBlocage?: string) {
-    return this.prisma.reservation.update({
+  async updateStatut(id: number, statut: StatutReservation, motifBlocage?: string) {
+    const updated = await this.prisma.reservation.update({
       where: { id },
       data: { statut, ...(motifBlocage ? { motifBlocage } : {}) },
+      include: {
+        chambre: { include: { hotel: true } },
+      },
     });
+
+    await this.notificationService.notifyReservationStatusUpdate({
+      accountId: updated.accountId,
+      bookingReference: updated.codeConfirmation,
+      hotelName: updated.chambre.hotel.nom,
+      status: updated.statut,
+      checkInDate: updated.dateArrivee,
+    });
+
+    return updated;
   }
 
   remove(id: number) {

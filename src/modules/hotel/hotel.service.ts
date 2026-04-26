@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CreateHotelDto } from './dto/create-hotel.dto';
 import { UpdateHotelDto } from './dto/update-hotel.dto';
 import { CheckAvailabilityDto } from './dto/check-availability.dto';
+import { NotificationService } from '../notification/notification.service';
 
 export interface PaginatedResult<T> {
   items: T[];
@@ -15,7 +16,10 @@ export interface PaginatedResult<T> {
 
 @Injectable()
 export class HotelService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationService: NotificationService,
+  ) {}
   private readonly cityTaxPerNight = 5;
 
   private readonly blockingStatuses = [
@@ -40,8 +44,16 @@ export class HotelService {
     return Math.max(1, Math.round(diffInMs / (1000 * 60 * 60 * 24)));
   }
 
-  create(dto: CreateHotelDto) {
-    return this.prisma.hotel.create({ data: dto });
+  async create(dto: CreateHotelDto) {
+    const hotel = await this.prisma.hotel.create({ data: dto });
+
+    await this.notificationService.notifyNewHotel({
+      id: hotel.id,
+      nom: hotel.nom,
+      ville: hotel.ville,
+    });
+
+    return hotel;
   }
 
   async findAll(options?: {

@@ -21,6 +21,11 @@ export class NotificationController {
     return this.notificationService.markAsRead(id);
   }
 
+  @Patch('account/:accountId/read-all')
+  markAllAsRead(@Param('accountId', ParseIntPipe) accountId: number) {
+    return this.notificationService.markAllAsRead(accountId);
+  }
+
   @Delete(':id')
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.notificationService.remove(id);

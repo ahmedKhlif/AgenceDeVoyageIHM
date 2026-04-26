@@ -2,13 +2,35 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateOffreDto } from './dto/create-offre.dto';
 import { UpdateOffreDto } from './dto/update-offre.dto';
+import { NotificationService } from '../notification/notification.service';
 
 @Injectable()
 export class OffreService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationService: NotificationService,
+  ) {}
 
-  create(dto: CreateOffreDto) {
-    return this.prisma.offre.create({ data: dto });
+  async create(dto: CreateOffreDto) {
+    const offer = await this.prisma.offre.create({
+      data: dto,
+      include: {
+        hotel: {
+          select: {
+            nom: true,
+          },
+        },
+      },
+    });
+
+    await this.notificationService.notifyNewOffer({
+      titre: offer.titre,
+      tauxRemise: offer.tauxRemise,
+      hotelId: offer.hotelId,
+      hotelName: offer.hotel?.nom,
+    });
+
+    return offer;
   }
 
   findAll() {
