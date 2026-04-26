@@ -5,6 +5,18 @@ import { UpdateReservationDto } from './dto/update-reservation.dto';
 import { StatutReservation } from '@prisma/client';
 import { CreateBookingDto } from './dto/create-booking.dto';
 
+type CancellationEvaluation = {
+  allowed: boolean;
+  policyLabel: string;
+  policyDescription: string;
+  freeCancellationUntil: Date | null;
+  refundType: 'FULL' | 'PARTIAL' | 'NONE';
+  refundAmount: number;
+  chargeAmount: number;
+  totalPaid: number;
+  reason?: string;
+};
+
 @Injectable()
 export class ReservationService {
   constructor(private readonly prisma: PrismaService) {}
@@ -35,6 +47,110 @@ export class ReservationService {
     const year = new Date().getFullYear();
     const randomChunk = Math.random().toString(36).slice(2, 8).toUpperCase();
     return `VH-${year}-${randomChunk}`;
+  }
+
+  private evaluateCancellationPolicy(input: {
+    status: StatutReservation;
+    checkInDate: Date;
+    totalPaid: number;
+    roomPricePerNight: number;
+    now: Date;
+    policy?: {
+      delaiLimiteHeures: number;
+      fraisAnnulation: number;
+      remboursementTotal: boolean;
+      description?: string | null;
+    } | null;
+  }): CancellationEvaluation {
+    const { status, checkInDate, totalPaid, roomPricePerNight, now, policy } = input;
+    const nowMs = now.getTime();
+    const checkInMs = checkInDate.getTime();
+    const isPastStart = nowMs >= checkInMs;
+    const isAlreadyCancelled = [StatutReservation.ANNULEE, StatutReservation.REFUSEE].includes(
+      status,
+    );
+    const isClosedReservation = status === StatutReservation.TERMINEE;
+
+    if (isAlreadyCancelled) {
+      return {
+        allowed: false,
+        policyLabel: 'Booking already cancelled',
+        policyDescription: 'This reservation has already been cancelled and cannot be modified.',
+        freeCancellationUntil: null,
+        refundType: 'NONE',
+        refundAmount: 0,
+        chargeAmount: 0,
+        totalPaid,
+        reason: 'Reservation is already cancelled',
+      };
+    }
+
+    if (isClosedReservation || isPastStart) {
+      return {
+        allowed: false,
+        policyLabel: 'Cancellation window closed',
+        policyDescription: 'This reservation can no longer be cancelled because the stay has started.',
+        freeCancellationUntil: null,
+        refundType: 'NONE',
+        refundAmount: 0,
+        chargeAmount: totalPaid,
+        totalPaid,
+        reason: 'Cancellation deadline has passed',
+      };
+    }
+
+    const defaultHours = 48;
+    const deadlineHours = policy?.delaiLimiteHeures ?? defaultHours;
+    const freeCancellationUntil = new Date(checkInDate.getTime() - deadlineHours * 60 * 60 * 1000);
+    const beforeDeadline = nowMs <= freeCancellationUntil.getTime();
+
+    if (beforeDeadline) {
+      return {
+        allowed: true,
+        policyLabel: `Free cancellation before ${freeCancellationUntil.toISOString()}`,
+        policyDescription:
+          policy?.description?.trim() ||
+          `Free cancellation is available up to ${deadlineHours} hours before check-in.`,
+        freeCancellationUntil,
+        refundType: 'FULL',
+        refundAmount: totalPaid,
+        chargeAmount: 0,
+        totalPaid,
+      };
+    }
+
+    const configuredPenalty = Math.max(0, policy?.fraisAnnulation ?? roomPricePerNight);
+    const effectivePenalty = Math.min(totalPaid, configuredPenalty || roomPricePerNight);
+    const refundAmount = Math.max(0, totalPaid - effectivePenalty);
+
+    return {
+      allowed: true,
+      policyLabel: `After ${freeCancellationUntil.toISOString()}, cancellation charges apply`,
+      policyDescription:
+        policy?.description?.trim() ||
+        'After the free cancellation deadline, the first night is charged.',
+      freeCancellationUntil,
+      refundType: refundAmount <= 0 ? 'NONE' : 'PARTIAL',
+      refundAmount,
+      chargeAmount: totalPaid - refundAmount,
+      totalPaid,
+    };
+  }
+
+  private async getReservationWithRelations(id: number) {
+    const reservation = await this.prisma.reservation.findUnique({
+      where: { id },
+      include: {
+        chambre: { include: { hotel: true, typeChambre: true } },
+        account: { include: { profile: true } },
+      },
+    });
+
+    if (!reservation) {
+      throw new BadRequestException('Booking not found');
+    }
+
+    return reservation;
   }
 
   create(dto: CreateReservationDto) {
@@ -170,6 +286,104 @@ export class ReservationService {
         email: dto.email,
         phone: dto.phone,
         specialRequests: dto.specialRequests ?? null,
+      },
+    };
+  }
+
+  async getCancellationPreview(id: number) {
+    const reservation = await this.getReservationWithRelations(id);
+    const policy = await this.prisma.conditionAnnulation.findFirst({
+      orderBy: { delaiLimiteHeures: 'desc' },
+    });
+    const now = new Date();
+    const evaluation = this.evaluateCancellationPolicy({
+      status: reservation.statut,
+      checkInDate: reservation.dateArrivee,
+      totalPaid: reservation.montantTotal,
+      roomPricePerNight: reservation.chambre.prixParNuit,
+      now,
+      policy,
+    });
+
+    return {
+      bookingId: reservation.id,
+      bookingReference: reservation.codeConfirmation,
+      hotelName: reservation.chambre.hotel.nom,
+      roomName:
+        reservation.chambre.typeChambre?.libelle ?? `Room ${reservation.chambre.numero}`,
+      stay: {
+        checkIn: reservation.dateArrivee,
+        checkOut: reservation.dateDepart,
+        nights: reservation.nombreNuits,
+      },
+      cancellationAllowed: evaluation.allowed,
+      cancellationDeadline: evaluation.freeCancellationUntil,
+      policy: {
+        label: evaluation.policyLabel,
+        description: evaluation.policyDescription,
+      },
+      refund: {
+        type: evaluation.refundType,
+        amount: evaluation.refundAmount,
+        chargeAmount: evaluation.chargeAmount,
+        totalPaid: evaluation.totalPaid,
+      },
+      reason: evaluation.reason ?? null,
+    };
+  }
+
+  async cancelBooking(id: number) {
+    const reservation = await this.getReservationWithRelations(id);
+    const policy = await this.prisma.conditionAnnulation.findFirst({
+      orderBy: { delaiLimiteHeures: 'desc' },
+    });
+    const now = new Date();
+    const evaluation = this.evaluateCancellationPolicy({
+      status: reservation.statut,
+      checkInDate: reservation.dateArrivee,
+      totalPaid: reservation.montantTotal,
+      roomPricePerNight: reservation.chambre.prixParNuit,
+      now,
+      policy,
+    });
+
+    if (!evaluation.allowed) {
+      throw new BadRequestException(
+        evaluation.reason || 'This reservation cannot be cancelled at this time',
+      );
+    }
+
+    const cancellationTimestamp = now.toISOString();
+    const cancellationNote = `Cancelled on ${cancellationTimestamp}; refund=${evaluation.refundAmount.toFixed(2)}; charge=${evaluation.chargeAmount.toFixed(2)}`;
+
+    const updated = await this.prisma.reservation.update({
+      where: { id: reservation.id },
+      data: {
+        statut: StatutReservation.ANNULEE,
+        motifBlocage: cancellationNote,
+      },
+      include: {
+        chambre: { include: { hotel: true, typeChambre: true } },
+      },
+    });
+
+    return {
+      cancelled: true,
+      bookingId: updated.id,
+      bookingReference: updated.codeConfirmation,
+      cancellationDate: cancellationTimestamp,
+      hotelName: updated.chambre.hotel.nom,
+      roomName: updated.chambre.typeChambre?.libelle ?? `Room ${updated.chambre.numero}`,
+      stay: {
+        checkIn: updated.dateArrivee,
+        checkOut: updated.dateDepart,
+        nights: updated.nombreNuits,
+      },
+      refund: {
+        type: evaluation.refundType,
+        amount: evaluation.refundAmount,
+        chargeAmount: evaluation.chargeAmount,
+        totalPaid: evaluation.totalPaid,
       },
     };
   }
