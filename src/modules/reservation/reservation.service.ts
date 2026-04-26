@@ -66,9 +66,8 @@ export class ReservationService {
     const nowMs = now.getTime();
     const checkInMs = checkInDate.getTime();
     const isPastStart = nowMs >= checkInMs;
-    const isAlreadyCancelled = [StatutReservation.ANNULEE, StatutReservation.REFUSEE].includes(
-      status,
-    );
+    const isAlreadyCancelled =
+      status === StatutReservation.ANNULEE || status === StatutReservation.REFUSEE;
     const isClosedReservation = status === StatutReservation.TERMINEE;
 
     if (isAlreadyCancelled) {
