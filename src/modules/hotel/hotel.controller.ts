@@ -17,12 +17,33 @@ export class HotelController {
   findAll(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
+    @Query('ids') ids?: string,
+    @Query('minPrice') minPrice?: string,
+    @Query('maxPrice') maxPrice?: string,
+    @Query('stars') stars?: string,
+    @Query('search') search?: string,
+    @Query('sortBy') sortBy?: string,
   ) {
     const parsedPage = page ? Number.parseInt(page, 10) : undefined;
     const parsedLimit = limit ? Number.parseInt(limit, 10) : undefined;
+    const parsedIds = ids
+      ? ids.split(',').map((id) => Number.parseInt(id, 10)).filter((id) => !Number.isNaN(id))
+      : undefined;
+    const parsedStars = stars
+      ? stars.split(',').map((s) => Number.parseInt(s, 10)).filter((s) => !Number.isNaN(s))
+      : undefined;
+    const parsedMinPrice = minPrice ? Number.parseInt(minPrice, 10) : undefined;
+    const parsedMaxPrice = maxPrice ? Number.parseInt(maxPrice, 10) : undefined;
+
     return this.hotelService.findAll({
       page: Number.isFinite(parsedPage) ? parsedPage : undefined,
       limit: Number.isFinite(parsedLimit) ? parsedLimit : undefined,
+      ids: parsedIds && parsedIds.length > 0 ? parsedIds : undefined,
+      minPrice: Number.isFinite(parsedMinPrice) ? parsedMinPrice : undefined,
+      maxPrice: Number.isFinite(parsedMaxPrice) ? parsedMaxPrice : undefined,
+      stars: parsedStars && parsedStars.length > 0 ? parsedStars : undefined,
+      search: search || undefined,
+      sortBy: sortBy || undefined,
     });
   }
 
@@ -38,13 +59,35 @@ export class HotelController {
     @Query('checkOut') checkOut?: string,
     @Query('guests') guests?: string,
     @Query('rooms') rooms?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('minPrice') minPrice?: string,
+    @Query('maxPrice') maxPrice?: string,
+    @Query('stars') stars?: string,
+    @Query('search') search?: string,
+    @Query('sortBy') sortBy?: string,
   ) {
+    const parsedPage = page ? Number.parseInt(page, 10) : undefined;
+    const parsedLimit = limit ? Number.parseInt(limit, 10) : undefined;
+    const parsedStars = stars
+      ? stars.split(',').map((s) => Number.parseInt(s, 10)).filter((s) => !Number.isNaN(s))
+      : undefined;
+    const parsedMinPrice = minPrice ? Number.parseInt(minPrice, 10) : undefined;
+    const parsedMaxPrice = maxPrice ? Number.parseInt(maxPrice, 10) : undefined;
+
     return this.hotelService.findAvailable({
-      city,
-      checkIn,
-      checkOut,
+      city: city || undefined,
+      checkIn: checkIn || undefined,
+      checkOut: checkOut || undefined,
       guests: guests ? Number.parseInt(guests, 10) : undefined,
       rooms: rooms ? Number.parseInt(rooms, 10) : undefined,
+      page: Number.isFinite(parsedPage) ? parsedPage : undefined,
+      limit: Number.isFinite(parsedLimit) ? parsedLimit : undefined,
+      minPrice: Number.isFinite(parsedMinPrice) ? parsedMinPrice : undefined,
+      maxPrice: Number.isFinite(parsedMaxPrice) ? parsedMaxPrice : undefined,
+      stars: parsedStars && parsedStars.length > 0 ? parsedStars : undefined,
+      search: search || undefined,
+      sortBy: sortBy || undefined,
     });
   }
 

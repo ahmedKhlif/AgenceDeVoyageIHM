@@ -5,6 +5,14 @@ import { CreateHotelDto } from './dto/create-hotel.dto';
 import { UpdateHotelDto } from './dto/update-hotel.dto';
 import { CheckAvailabilityDto } from './dto/check-availability.dto';
 
+export interface PaginatedResult<T> {
+  items: T[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
 @Injectable()
 export class HotelService {
   constructor(private readonly prisma: PrismaService) {}
@@ -36,15 +44,56 @@ export class HotelService {
     return this.prisma.hotel.create({ data: dto });
   }
 
-  async findAll(options?: { page?: number; limit?: number }) {
+  async findAll(options?: {
+    page?: number;
+    limit?: number;
+    ids?: number[];
+    minPrice?: number;
+    maxPrice?: number;
+    stars?: number[];
+    search?: string;
+    sortBy?: string;
+  }): Promise<any> {
     const hasPagination =
       Number.isFinite(options?.page) &&
       Number.isFinite(options?.limit) &&
       (options?.page ?? 0) > 0 &&
       (options?.limit ?? 0) > 0;
 
+    const where: any = {};
+
+    if (options?.ids && options.ids.length > 0) {
+      where.id = { in: options.ids };
+    }
+    if (options?.stars && options.stars.length > 0) {
+      where.etoiles = { in: options.stars };
+    }
+    if (options?.search) {
+      where.OR = [
+        { nom: { contains: options.search, mode: 'insensitive' } },
+        { ville: { contains: options.search, mode: 'insensitive' } },
+        { pays: { contains: options.search, mode: 'insensitive' } },
+      ];
+    }
+    if (Number.isFinite(options?.minPrice) || Number.isFinite(options?.maxPrice)) {
+      where.chambres = {
+        some: {
+          prixParNuit: {
+            ...(Number.isFinite(options?.minPrice) && { gte: options!.minPrice }),
+            ...(Number.isFinite(options?.maxPrice) && { lte: options!.maxPrice }),
+          },
+        },
+      };
+    }
+
+    const orderBy: any = options?.sortBy === 'note' ? { etoiles: 'desc' } : { id: 'desc' };
+
     if (!hasPagination) {
-      return this.prisma.hotel.findMany({ include: { chambres: true, offres: true } });
+      return this.prisma.hotel.findMany({
+        where,
+        include: { chambres: true, offres: true },
+        orderBy,
+      });
     }
 
     const page = options!.page!;
@@ -53,23 +102,18 @@ export class HotelService {
 
     const [items, total] = await Promise.all([
       this.prisma.hotel.findMany({
+        where,
         include: { chambres: true, offres: true },
-        orderBy: { id: 'desc' },
+        orderBy,
         skip,
         take: limit,
       }),
-      this.prisma.hotel.count(),
+      this.prisma.hotel.count({ where }),
     ]);
 
     const totalPages = Math.max(1, Math.ceil(total / limit));
 
-    return {
-      items,
-      total,
-      page,
-      limit,
-      totalPages,
-    };
+    return { items, total, page, limit, totalPages };
   }
 
   findOne(id: number) {
@@ -152,11 +196,7 @@ export class HotelService {
       total,
       rooms: matchingRooms,
       selectedPricePerNight,
-      guests: {
-        adults,
-        children,
-        total: totalGuests,
-      },
+      guests: { adults, children, total: totalGuests },
     };
   }
 
@@ -166,7 +206,14 @@ export class HotelService {
     checkOut?: string;
     guests?: number;
     rooms?: number;
-  }) {
+    page?: number;
+    limit?: number;
+    minPrice?: number;
+    maxPrice?: number;
+    stars?: number[];
+    search?: string;
+    sortBy?: string;
+  }): Promise<any> {
     const guests = Number.isFinite(filters.guests) ? Math.max(1, filters.guests ?? 1) : 1;
     const rooms = Number.isFinite(filters.rooms) ? Math.max(1, filters.rooms ?? 1) : 1;
     const capacityPerRoom = Math.max(1, Math.ceil(guests / rooms));
@@ -189,24 +236,38 @@ export class HotelService {
       }
     }
 
+    const where: any = {
+      actif: true,
+    };
+
+    if (filters.city) {
+      where.ville = { equals: filters.city, mode: 'insensitive' };
+    }
+    if (filters.stars && filters.stars.length > 0) {
+      where.etoiles = { in: filters.stars };
+    }
+    if (filters.search) {
+      where.OR = [
+        { nom: { contains: filters.search, mode: 'insensitive' } },
+        { ville: { contains: filters.search, mode: 'insensitive' } },
+        { pays: { contains: filters.search, mode: 'insensitive' } },
+      ];
+    }
+
+    const chambreWhere: any = {
+      disponible: true,
+      capacite: { gte: capacityPerRoom },
+    };
+    if (Number.isFinite(filters.minPrice) || Number.isFinite(filters.maxPrice)) {
+      chambreWhere.prixParNuit = {
+        ...(Number.isFinite(filters.minPrice) && { gte: filters.minPrice }),
+        ...(Number.isFinite(filters.maxPrice) && { lte: filters.maxPrice }),
+      };
+    }
+    where.chambres = { some: chambreWhere };
+
     const hotels = await this.prisma.hotel.findMany({
-      where: {
-        actif: true,
-        ...(filters.city
-          ? {
-              ville: {
-                equals: filters.city,
-                mode: 'insensitive',
-              },
-            }
-          : {}),
-        chambres: {
-          some: {
-            disponible: true,
-            capacite: { gte: capacityPerRoom },
-          },
-        },
-      },
+      where,
       include: {
         chambres: {
           include: {
@@ -231,26 +292,40 @@ export class HotelService {
       },
     });
 
-    return hotels
+    const availableHotels = hotels
       .map((hotel) => {
         const chambresDisponibles = hotel.chambres.filter((chambre) => {
-          if (!chambre.disponible || chambre.capacite < capacityPerRoom) {
-            return false;
-          }
-
-          if (!startDate || !endDate) {
-            return true;
-          }
-
+          if (!chambre.disponible || chambre.capacite < capacityPerRoom) return false;
+          if (!startDate || !endDate) return true;
           return chambre.reservations.length === 0;
         });
-
-        return {
-          ...hotel,
-          chambres: chambresDisponibles,
-        };
+        return { ...hotel, chambres: chambresDisponibles };
       })
       .filter((hotel) => hotel.chambres.length >= rooms);
+
+    if (filters.sortBy === 'note') {
+      availableHotels.sort((a, b) => b.etoiles - a.etoiles);
+    } else {
+      availableHotels.sort((a, b) => b.id - a.id);
+    }
+
+    const hasPagination =
+      Number.isFinite(filters.page) &&
+      Number.isFinite(filters.limit) &&
+      (filters.page ?? 0) > 0 &&
+      (filters.limit ?? 0) > 0;
+
+    if (!hasPagination) {
+      return availableHotels;
+    }
+
+    const page = filters.page!;
+    const limit = filters.limit!;
+    const total = availableHotels.length;
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    const items = availableHotels.slice((page - 1) * limit, page * limit);
+
+    return { items, total, page, limit, totalPages };
   }
 
   update(id: number, dto: UpdateHotelDto) {
