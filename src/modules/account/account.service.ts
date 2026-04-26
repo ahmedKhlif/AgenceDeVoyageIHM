@@ -39,16 +39,57 @@ export class AccountService {
   }
 
   async login(email: string, password: string) {
+    const normalizedEmail = email.trim().toLowerCase();
+
     const account = await this.prisma.account.findUnique({
-      where: { email },
+      where: { email: normalizedEmail },
       include: { profile: true },
     });
-    if (!account || !(await bcrypt.compare(password, account.motDePasse))) {
+    if (account) {
+      const accountPasswordValid = await bcrypt.compare(password, account.motDePasse);
+      if (!accountPasswordValid) {
+        throw new UnauthorizedException('Invalid credentials');
+      }
+
+      const { motDePasse, ...result } = account;
+      return {
+        ...result,
+        role: result.email.toLowerCase().includes('admin') ? 'admin' : 'client',
+      };
+    }
+
+    const agency = await this.prisma.agenceVoyage.findUnique({
+      where: { email: normalizedEmail },
+    });
+
+    if (!agency || !agency.actif) {
       throw new UnauthorizedException('Invalid credentials');
     }
-    // Return account without password
-    const { motDePasse, ...result } = account;
-    return result;
+
+    let agencyPasswordValid = false;
+    if (agency.motDePasse.startsWith('$2a$') || agency.motDePasse.startsWith('$2b$')) {
+      agencyPasswordValid = await bcrypt.compare(password, agency.motDePasse);
+    } else if (password === agency.motDePasse) {
+      agencyPasswordValid = true;
+      const migratedHash = await bcrypt.hash(password, 10);
+      await this.prisma.agenceVoyage.update({
+        where: { id: agency.id },
+        data: { motDePasse: migratedHash },
+      });
+    }
+
+    if (!agencyPasswordValid) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    return {
+      id: -agency.id,
+      email: agency.email,
+      dateInscription: new Date().toISOString(),
+      actif: agency.actif,
+      role: 'admin',
+      profile: null,
+    };
   }
 
   async googleLogin(data: { email: string; firstName: string; lastName: string; uid: string }) {

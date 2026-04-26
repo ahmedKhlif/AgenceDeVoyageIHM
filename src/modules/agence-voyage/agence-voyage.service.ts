@@ -2,13 +2,21 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateAgenceVoyageDto } from './dto/create-agence-voyage.dto';
 import { UpdateAgenceVoyageDto } from './dto/update-agence-voyage.dto';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class AgenceVoyageService {
   constructor(private readonly prisma: PrismaService) {}
 
-  create(dto: CreateAgenceVoyageDto) {
-    return this.prisma.agenceVoyage.create({ data: dto });
+  async create(dto: CreateAgenceVoyageDto) {
+    const hashedPassword = await bcrypt.hash(dto.motDePasse, 10);
+    return this.prisma.agenceVoyage.create({
+      data: {
+        ...dto,
+        email: dto.email.trim().toLowerCase(),
+        motDePasse: hashedPassword,
+      },
+    });
   }
 
   findAll() {
@@ -22,8 +30,16 @@ export class AgenceVoyageService {
     });
   }
 
-  update(id: number, dto: UpdateAgenceVoyageDto) {
-    return this.prisma.agenceVoyage.update({ where: { id }, data: dto });
+  async update(id: number, dto: UpdateAgenceVoyageDto) {
+    const data = { ...dto } as UpdateAgenceVoyageDto;
+    if (dto.email) {
+      data.email = dto.email.trim().toLowerCase();
+    }
+    if (dto.motDePasse) {
+      data.motDePasse = await bcrypt.hash(dto.motDePasse, 10);
+    }
+
+    return this.prisma.agenceVoyage.update({ where: { id }, data });
   }
 
   remove(id: number) {
