@@ -110,6 +110,8 @@ model Hotel {
   description    String?
   email          String
   telephone      String
+  latitude       Float?
+  longitude      Float?
   actif          Boolean      @default(true)
   estPartenaire  Boolean      @default(false)
   agenceVoyageId Int

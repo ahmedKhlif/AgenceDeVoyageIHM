@@ -27,6 +27,12 @@ export class CreateHotelDto {
 
   @IsString()
   telephone: string;
+  
+  @IsOptional()
+  latitude?: number;
+
+  @IsOptional()
+  longitude?: number;
 
   @IsBoolean()
   @IsOptional()
