@@ -189,7 +189,6 @@ export class HotelService {
     const matchingRooms = hotel.chambres
       .filter(
         (room) =>
-          room.disponible &&
           room.capacite >= totalGuests &&
           room.reservations.length === 0,
       )
@@ -280,7 +279,6 @@ export class HotelService {
     }
 
     const chambreWhere: any = {
-      disponible: true,
       capacite: { gte: capacityPerRoom },
     };
     if (Number.isFinite(filters.minPrice) || Number.isFinite(filters.maxPrice)) {
@@ -320,7 +318,7 @@ export class HotelService {
     const availableHotels = hotels
       .map((hotel) => {
         const chambresDisponibles = hotel.chambres.filter((chambre) => {
-          if (!chambre.disponible || chambre.capacite < capacityPerRoom) return false;
+          if (chambre.capacite < capacityPerRoom) return false;
           if (!startDate || !endDate) return true;
           return chambre.reservations.length === 0;
         });

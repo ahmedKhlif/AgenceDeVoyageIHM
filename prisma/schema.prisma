@@ -158,27 +158,30 @@ model Chambre {
 }
 
 model Reservation {
-  id                Int               @id @default(autoincrement())
-  accountId         Int
-  chambreId         Int
-  dateCreation      DateTime          @default(now())
-  dateArrivee       DateTime
-  dateDepart        DateTime
-  nombrePersonnes   Int
-  nombreNuits       Int
-  montantTotal      Float
-  codeConfirmation  String            @unique
-  statut            StatutReservation @default(EN_ATTENTE)
-  paymentStatus     String            @default("PENDING")
-  motifBlocage      String?
-  stripeSessionId   String?           @unique
-  stripePaymentIntentId String?       @unique
-  paymentDate       DateTime?
-  account           Account           @relation(fields: [accountId], references: [id])
-  chambre           Chambre           @relation(fields: [chambreId], references: [id])
-  avis              Avis[]
-  reclamations      Reclamation[]
+  id                    Int               @id @default(autoincrement())
+  accountId             Int
+  chambreId             Int
+  dateCreation          DateTime          @default(now())
+  dateArrivee           DateTime
+  dateDepart            DateTime
+  nombrePersonnes       Int
+  nombreNuits           Int
+  montantTotal          Float
+  codeConfirmation      String            @unique
+  statut                StatutReservation @default(EN_ATTENTE)
+  paymentStatus         String            @default("PENDING")
+  motifBlocage          String?
+  stripeSessionId       String?           @unique
+  stripePaymentIntentId String?           @unique
+  paymentDate           DateTime?
+  account               Account           @relation(fields: [accountId], references: [id])
+  chambre               Chambre           @relation(fields: [chambreId], references: [id])
+  avis                  Avis[]
+  reclamations          Reclamation[]
 
+  // Performance indexes for date-based availability queries
+  @@index([dateArrivee, dateDepart])
+  @@index([chambreId, statut])
   @@map("reservations")
 }
 
