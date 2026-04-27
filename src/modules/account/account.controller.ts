@@ -4,6 +4,7 @@ import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
 import { UpdateProfileDto } from '../profile/dto/update-profile.dto';
 import { CreatePaymentMethodDto } from './dto/create-payment-method.dto';
+import { ConfirmPaymentMethodSessionDto } from './dto/confirm-payment-method-session.dto';
 import { UpdatePaymentMethodDto } from './dto/update-payment-method.dto';
 
 @Controller('accounts')
@@ -58,7 +59,15 @@ export class AccountController {
     @Param('accountId', ParseIntPipe) accountId: number,
     @Body() dto: CreatePaymentMethodDto,
   ) {
-    return this.accountService.createPaymentMethod(accountId, dto);
+    return this.accountService.createPaymentMethodSetupSession(accountId, dto);
+  }
+
+  @Post(':accountId/payment-methods/confirm-session')
+  confirmPaymentMethodSession(
+    @Param('accountId', ParseIntPipe) accountId: number,
+    @Body() dto: ConfirmPaymentMethodSessionDto,
+  ) {
+    return this.accountService.confirmPaymentMethodSetupSession(accountId, dto.sessionId);
   }
 
   @Patch(':accountId/payment-methods/:paymentMethodId')

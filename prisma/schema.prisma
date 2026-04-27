@@ -41,6 +41,7 @@ model Account {
   motDePasse      String
   dateInscription DateTime      @default(now())
   actif           Boolean       @default(true)
+  stripeCustomerId String?      @unique
   profile         Profile?
   reservations    Reservation[]
   notifications   Notification[]
@@ -73,7 +74,10 @@ model Profile {
 model PaymentMethod {
   id             Int      @id @default(autoincrement())
   accountId      Int
-  cardholderName String
+  stripePaymentMethodId String? @unique
+  stripeCustomerId String?
+  stripeSetupIntentId String?
+  cardholderName String?
   brand          String
   last4          String
   expiryMonth    Int
