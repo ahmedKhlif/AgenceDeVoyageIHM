@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsDateString, IsEmail, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsDateString, IsEmail, IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator';
 
 export class CreateBookingDto {
   @Type(() => Number)
@@ -44,4 +44,9 @@ export class CreateBookingDto {
   @IsOptional()
   @IsString()
   specialRequests?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['PAY_NOW', 'PAY_AT_HOTEL'])
+  paymentOption?: 'PAY_NOW' | 'PAY_AT_HOTEL';
 }

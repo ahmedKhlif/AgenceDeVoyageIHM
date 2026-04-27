@@ -15,6 +15,7 @@ import { ReclamationModule } from './modules/reclamation/reclamation.module';
 import { SystemConfigModule } from './modules/system-config/system-config.module';
 import { ConditionAnnulationModule } from './modules/condition-annulation/condition-annulation.module';
 import { StatsModule } from './modules/stats/stats.module';
+import { PaymentModule } from './modules/payment/payment.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { StatsModule } from './modules/stats/stats.module';
     SystemConfigModule,
     ConditionAnnulationModule,
     StatsModule,
+    PaymentModule,
   ],
 })
 export class AppModule {}

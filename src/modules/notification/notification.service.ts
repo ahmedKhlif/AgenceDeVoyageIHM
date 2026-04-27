@@ -154,9 +154,19 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
           lte: horizon,
         },
       },
-      include: {
-        account: { include: { profile: true } },
-        chambre: { include: { hotel: true } },
+      select: {
+        accountId: true,
+        codeConfirmation: true,
+        dateArrivee: true,
+        chambre: {
+          select: {
+            hotel: {
+              select: {
+                nom: true,
+              },
+            },
+          },
+        },
       },
     });
 

@@ -246,6 +246,8 @@ export class ReservationService {
     const taxes = this.cityTaxPerNight * nights;
     const total = roomPrice + taxes;
     const bookingReference = this.generateBookingReference();
+    const paymentOption = dto.paymentOption === 'PAY_AT_HOTEL' ? 'PAY_AT_HOTEL' : 'PAY_NOW';
+    const payAtHotel = paymentOption === 'PAY_AT_HOTEL';
 
     const reservation = await this.prisma.reservation.create({
       data: {
@@ -257,7 +259,8 @@ export class ReservationService {
         nombreNuits: nights,
         montantTotal: total,
         codeConfirmation: bookingReference,
-        statut: StatutReservation.EN_ATTENTE,
+        statut: payAtHotel ? StatutReservation.CONFIRMEE : StatutReservation.EN_ATTENTE,
+        paymentStatus: payAtHotel ? 'PAY_AT_HOTEL' : 'PENDING',
       },
       include: {
         chambre: { include: { hotel: true, typeChambre: true } },
@@ -279,16 +282,18 @@ export class ReservationService {
       });
     }
 
-    await this.notificationService.notifyReservationStatusUpdate({
-      accountId: account.id,
-      bookingReference: reservation.codeConfirmation,
-      hotelName: reservation.chambre.hotel.nom,
-      status: reservation.statut,
-      checkInDate: reservation.dateArrivee,
-    });
+    if (payAtHotel) {
+      await this.notificationService.notifyReservationStatusUpdate({
+        accountId: account.id,
+        bookingReference: reservation.codeConfirmation,
+        hotelName: reservation.chambre.hotel.nom,
+        status: reservation.statut,
+        checkInDate: reservation.dateArrivee,
+      });
+    }
 
     return {
-      confirmed: true,
+      confirmed: payAtHotel,
       bookingReference: reservation.codeConfirmation,
       bookingId: reservation.id,
       hotelName: reservation.chambre.hotel.nom,
@@ -313,6 +318,7 @@ export class ReservationService {
         phone: dto.phone,
         specialRequests: dto.specialRequests ?? null,
       },
+      paymentOption,
     };
   }
 

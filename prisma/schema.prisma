@@ -165,7 +165,11 @@ model Reservation {
   montantTotal      Float
   codeConfirmation  String            @unique
   statut            StatutReservation @default(EN_ATTENTE)
+  paymentStatus     String            @default("PENDING")
   motifBlocage      String?
+  stripeSessionId   String?           @unique
+  stripePaymentIntentId String?       @unique
+  paymentDate       DateTime?
   account           Account           @relation(fields: [accountId], references: [id])
   chambre           Chambre           @relation(fields: [chambreId], references: [id])
   avis              Avis[]
