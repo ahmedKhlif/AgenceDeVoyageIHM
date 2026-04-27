@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query } from '@nestjs/common';
 import { ReservationService } from './reservation.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
 
@@ -12,12 +12,26 @@ export class BookingController {
   }
 
   @Get(':id/cancellation-preview')
-  cancellationPreview(@Param('id', ParseIntPipe) id: number) {
-    return this.reservationService.getCancellationPreview(id);
+  cancellationPreview(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('accountId') accountId?: string,
+  ) {
+    const parsedAccountId =
+      accountId && Number.isFinite(Number.parseInt(accountId, 10))
+        ? Number.parseInt(accountId, 10)
+        : undefined;
+    return this.reservationService.getCancellationPreview(id, parsedAccountId);
   }
 
   @Patch(':id/cancel')
-  cancelBooking(@Param('id', ParseIntPipe) id: number) {
-    return this.reservationService.cancelBooking(id);
+  cancelBooking(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('accountId') accountId?: string,
+  ) {
+    const parsedAccountId =
+      accountId && Number.isFinite(Number.parseInt(accountId, 10))
+        ? Number.parseInt(accountId, 10)
+        : undefined;
+    return this.reservationService.cancelBooking(id, parsedAccountId);
   }
 }

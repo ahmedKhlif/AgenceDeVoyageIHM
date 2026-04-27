@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { UpdateReservationDto } from './dto/update-reservation.dto';
@@ -178,6 +183,20 @@ export class ReservationService {
     return reservation;
   }
 
+  private assertReservationOwnership(reservationAccountId: number, accountId?: number) {
+    if (accountId == null) {
+      return;
+    }
+
+    if (!Number.isFinite(accountId) || accountId <= 0) {
+      throw new BadRequestException('Invalid accountId');
+    }
+
+    if (reservationAccountId !== accountId) {
+      throw new ForbiddenException('You are not allowed to cancel this reservation');
+    }
+  }
+
   async createBooking(dto: CreateBookingDto) {
     const checkIn = this.parseDateInput(dto.checkIn);
     const checkOut = this.parseDateInput(dto.checkOut);
@@ -322,8 +341,9 @@ export class ReservationService {
     };
   }
 
-  async getCancellationPreview(id: number) {
+  async getCancellationPreview(id: number, accountId?: number) {
     const reservation = await this.getReservationWithRelations(id);
+    this.assertReservationOwnership(reservation.accountId, accountId);
     const policy = await this.prisma.conditionAnnulation.findFirst({
       orderBy: { delaiLimiteHeures: 'desc' },
     });
@@ -364,8 +384,9 @@ export class ReservationService {
     };
   }
 
-  async cancelBooking(id: number) {
+  async cancelBooking(id: number, accountId?: number) {
     const reservation = await this.getReservationWithRelations(id);
+    this.assertReservationOwnership(reservation.accountId, accountId);
     const policy = await this.prisma.conditionAnnulation.findFirst({
       orderBy: { delaiLimiteHeures: 'desc' },
     });

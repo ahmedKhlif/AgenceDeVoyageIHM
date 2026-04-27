@@ -121,16 +121,16 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
 
     let type: TypeNotification = TypeNotification.CONFIRMATION_ANNULATION;
     let subject = `Booking update: ${statusLabel}`;
-    let message = `Booking ${input.bookingReference} at ${input.hotelName} is now ${statusLabel}.`;
+    let message = `Your reservation at ${input.hotelName} is now ${statusLabel}.`;
 
     if (input.status === StatutReservation.CONFIRMEE) {
       type = TypeNotification.CONFIRMATION_RESERVATION;
-      subject = `Booking confirmed: ${input.bookingReference}`;
-      message = `Your booking ${input.bookingReference} at ${input.hotelName} has been confirmed.`;
+      subject = `Booking confirmed`;
+      message = `Your reservation at ${input.hotelName} has been confirmed.`;
     } else if (input.status === StatutReservation.ANNULEE) {
       type = TypeNotification.ANNULATION_RESERVATION;
-      subject = `Booking cancelled: ${input.bookingReference}`;
-      message = `Your booking ${input.bookingReference} at ${input.hotelName} has been cancelled.`;
+      subject = `Booking cancelled`;
+      message = `Your reservation at ${input.hotelName} has been cancelled.`;
     }
 
     await this.notifyAccount({
@@ -156,7 +156,6 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
       },
       select: {
         accountId: true,
-        codeConfirmation: true,
         dateArrivee: true,
         chambre: {
           select: {
@@ -171,12 +170,14 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
     });
 
     for (const reservation of reservations) {
+      const checkIn = reservation.dateArrivee.toISOString().slice(0, 10);
+      const reminderToken = `at ${reservation.chambre.hotel.nom} is on ${checkIn}`;
       const alreadySent = await this.prisma.notification.findFirst({
         where: {
           accountId: reservation.accountId,
           type: TypeNotification.RAPPEL,
           message: {
-            contains: reservation.codeConfirmation,
+            contains: reminderToken,
             mode: 'insensitive',
           },
         },
@@ -187,12 +188,11 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
         continue;
       }
 
-      const checkIn = reservation.dateArrivee.toISOString().slice(0, 10);
       await this.notifyAccount({
         accountId: reservation.accountId,
         type: TypeNotification.RAPPEL,
-        subject: `Reminder: upcoming check-in (${reservation.codeConfirmation})`,
-        message: `Reminder: your check-in for booking ${reservation.codeConfirmation} at ${reservation.chambre.hotel.nom} is on ${checkIn}.`,
+        subject: `Reminder: upcoming check-in`,
+        message: `Reminder: your check-in ${reminderToken}.`,
         actionPath: '/reservations/history',
       });
     }
