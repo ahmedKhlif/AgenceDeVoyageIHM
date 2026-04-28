@@ -26,11 +26,6 @@ export class AvisController {
     return this.avisService.findAll();
   }
 
-  @Get(':id')
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.avisService.findOne(id);
-  }
-
   @Get('hotel/:hotelId')
   findByHotel(@Param('hotelId', ParseIntPipe) hotelId: number) {
     return this.avisService.findByHotel(hotelId);
@@ -39,6 +34,11 @@ export class AvisController {
   @Get('account/:accountId')
   findByAccount(@Param('accountId', ParseIntPipe) accountId: number) {
     return this.avisService.findByAccount(accountId);
+  }
+
+  @Get(':id')
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.avisService.findOne(id);
   }
 
   @Patch(':id')

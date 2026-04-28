@@ -46,8 +46,10 @@ export class ReservationController {
       end,
     };
 
-    const accountIdNum = accountId ? +accountId : undefined;
-    return this.reservationService.findByAccount(accountIdNum, options);
+    const accountIdNum = accountId ? Number.parseInt(accountId, 10) : undefined;
+    if (Number.isFinite(accountIdNum)) {
+      return this.reservationService.findByAccount(accountIdNum, options);
+    }
     return this.reservationService.findAll(options);
   }
 
