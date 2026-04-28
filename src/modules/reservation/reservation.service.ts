@@ -307,13 +307,9 @@ export class ReservationService {
         nombreNuits: nights,
         montantTotal: total,
         codeConfirmation: bookingReference,
-<<<<<<< HEAD
-        statut: StatutReservation.EN_ATTENTE,
-=======
         statut: payAtHotel
           ? StatutReservation.CONFIRMEE
           : StatutReservation.EN_ATTENTE,
->>>>>>> 3f6e65663a17868739bb7b04bd3124709ddb6eb7
         paymentStatus: payAtHotel ? 'PAY_AT_HOTEL' : 'PENDING',
       },
       include: {
@@ -336,8 +332,6 @@ export class ReservationService {
       });
     }
 
-<<<<<<< HEAD
-=======
     if (payAtHotel) {
       await this.notificationService.notifyReservationStatusUpdate({
         accountId: account.id,
@@ -351,7 +345,6 @@ export class ReservationService {
       });
     }
 
->>>>>>> 3f6e65663a17868739bb7b04bd3124709ddb6eb7
     return {
       confirmed: false,
       bookingReference: reservation.codeConfirmation,
@@ -610,7 +603,7 @@ export class ReservationService {
         where,
         include: {
           chambre: { include: { hotel: true } },
-          account: { include: { profile: true } }
+          account: { include: { profile: true } },
         },
         orderBy: { dateCreation: 'desc' },
       });
@@ -625,7 +618,7 @@ export class ReservationService {
         where,
         include: {
           chambre: { include: { hotel: true } },
-          account: { include: { profile: true } }
+          account: { include: { profile: true } },
         },
         orderBy: { dateCreation: 'desc' },
         skip,
