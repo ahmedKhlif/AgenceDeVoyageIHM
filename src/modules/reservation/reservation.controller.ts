@@ -46,8 +46,8 @@ export class ReservationController {
       end,
     };
 
-    if (accountId)
-      return this.reservationService.findByAccount(+accountId, options);
+    const accountIdNum = accountId ? +accountId : undefined;
+    return this.reservationService.findByAccount(accountIdNum, options);
     return this.reservationService.findAll(options);
   }
 

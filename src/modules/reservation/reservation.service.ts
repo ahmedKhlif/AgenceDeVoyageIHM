@@ -576,7 +576,7 @@ export class ReservationService {
   }
 
   async findByAccount(
-    accountId: number,
+    accountId?: number,
     options?: {
       page?: number;
       limit?: number;
@@ -595,7 +595,7 @@ export class ReservationService {
 
     const where: any = {
       ...this.buildReservationFilters(options),
-      accountId,
+      ...(accountId ? { accountId } : {}),
     };
 
     if (!hasPagination) {
