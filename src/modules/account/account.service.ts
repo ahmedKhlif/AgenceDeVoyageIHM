@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   BadRequestException,
   InternalServerErrorException,
   Injectable,
@@ -553,16 +554,41 @@ export class AccountService {
     });
 
     if (!account) {
-      throw new Error('Account not found');
+      throw new NotFoundException('Account not found');
     }
 
-    // Verify old password
-    const isValid = await bcrypt.compare(oldPassword, account.motDePasse);
+    const currentStoredPassword = account.motDePasse || '';
+    const isBcryptHash =
+      currentStoredPassword.startsWith('$2a$') ||
+      currentStoredPassword.startsWith('$2b$') ||
+      currentStoredPassword.startsWith('$2y$');
+
+    let isValid = false;
+    if (isBcryptHash) {
+      const normalizedHash = currentStoredPassword.startsWith('$2y$')
+        ? `$2b$${currentStoredPassword.slice(4)}`
+        : currentStoredPassword;
+      isValid = await bcrypt.compare(oldPassword, normalizedHash);
+    } else {
+      isValid = oldPassword === currentStoredPassword;
+    }
+
     if (!isValid) {
-      throw new Error('Current password is incorrect');
+      throw new BadRequestException('Current password is incorrect');
     }
 
-    // Hash new password
+    if (!newPassword || newPassword.trim().length < 8) {
+      throw new BadRequestException(
+        'New password must contain at least 8 characters',
+      );
+    }
+
+    if (oldPassword === newPassword) {
+      throw new ConflictException(
+        'New password must be different from current password',
+      );
+    }
+
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
     await this.prisma.account.update({
