@@ -7,6 +7,7 @@ import {
   Param,
   Delete,
   ParseIntPipe,
+  Query,
 } from '@nestjs/common';
 import { OffreService } from './offre.service';
 import { CreateOffreDto } from './dto/create-offre.dto';
@@ -22,8 +23,21 @@ export class OffreController {
   }
 
   @Get()
-  findAll() {
-    return this.offreService.findAll();
+  findAll(@Query('active') active?: string, @Query('hotelId') hotelId?: string) {
+    return this.offreService.findAll({
+      active: active === undefined ? undefined : active === 'true',
+      hotelId: hotelId ? Number.parseInt(hotelId, 10) : undefined,
+    });
+  }
+
+  @Get('active')
+  findActive() {
+    return this.offreService.findActive();
+  }
+
+  @Get('hotel/:hotelId')
+  findByHotel(@Param('hotelId', ParseIntPipe) hotelId: number) {
+    return this.offreService.findByHotel(hotelId);
   }
 
   @Get(':id')
