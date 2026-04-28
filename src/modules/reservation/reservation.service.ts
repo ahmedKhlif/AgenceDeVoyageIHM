@@ -601,7 +601,10 @@ export class ReservationService {
     if (!hasPagination) {
       return this.prisma.reservation.findMany({
         where,
-        include: { chambre: { include: { hotel: true } } },
+        include: {
+          chambre: { include: { hotel: true } },
+          account: { include: { profile: true } }
+        },
         orderBy: { dateCreation: 'desc' },
       });
     }
@@ -613,7 +616,10 @@ export class ReservationService {
     const [items, total] = await Promise.all([
       this.prisma.reservation.findMany({
         where,
-        include: { chambre: { include: { hotel: true } } },
+        include: {
+          chambre: { include: { hotel: true } },
+          account: { include: { profile: true } }
+        },
         orderBy: { dateCreation: 'desc' },
         skip,
         take: limit,
