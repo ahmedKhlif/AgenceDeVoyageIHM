@@ -13,7 +13,16 @@ services:
       - ./postgres-data:/var/lib/postgresql/data
     networks:
       - ihm-network
-    # Intentionally not publishing Postgres port to host — not public
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: ihm_mailpit
+    restart: unless-stopped
+    ports:
+      - '8025:8025'
+      - '1025:1025'
+    networks:
+      - ihm-network
 
   api:
     # build:
@@ -24,11 +33,14 @@ services:
     restart: unless-stopped
     depends_on:
       - db
+      - mailpit
     environment:
       NODE_ENV: production
+      PORT: 3001
       DATABASE_URL: 'postgresql://postgres:postgres@db:5432/ihm?schema=public'
+      APP_WEB_URL: 'http://localhost:3000'
     ports:
-      - '3000:3000'
+      - '3001:3001'
     networks:
       - ihm-network
 

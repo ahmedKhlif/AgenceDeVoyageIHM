@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, ParseIntPipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  ParseIntPipe,
+} from '@nestjs/common';
 import { OffreService } from './offre.service';
 import { CreateOffreDto } from './dto/create-offre.dto';
 import { UpdateOffreDto } from './dto/update-offre.dto';

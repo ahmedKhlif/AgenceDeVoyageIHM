@@ -5,6 +5,7 @@ import { CreateHotelDto } from './dto/create-hotel.dto';
 import { UpdateHotelDto } from './dto/update-hotel.dto';
 import { CheckAvailabilityDto } from './dto/check-availability.dto';
 import { NotificationService } from '../notification/notification.service';
+import { MailService } from '../mail/mail.service';
 
 export interface PaginatedResult<T> {
   items: T[];
@@ -19,6 +20,7 @@ export class HotelService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationService: NotificationService,
+    private readonly mailService: MailService,
   ) {}
   private readonly cityTaxPerNight = 5;
 
@@ -66,6 +68,25 @@ export class HotelService {
       ville: hotel.ville,
     });
 
+    try {
+      await this.mailService.sendTemplate({
+        to: await this.mailService.getSupportEmail(),
+        templateSlug: 'ops.new-hotel-alert',
+        tokens: {
+          hotel_name: hotel.nom,
+          city: hotel.ville,
+          hotel_email: hotel.email,
+          hotel_phone: hotel.telephone,
+        },
+        actionLabel: 'Open admin',
+        actionUrl: `${this.mailService.getAppWebUrl()}/admin/hotels`,
+        fallbackSubject: `New hotel onboarded: ${hotel.nom}`,
+        fallbackBody: `A new hotel was added in ${hotel.ville}.`,
+      });
+    } catch {
+      // Hotel creation should not fail because an internal alert could not be delivered.
+    }
+
     return hotel;
   }
 
@@ -100,18 +121,26 @@ export class HotelService {
         { pays: { contains: options.search, mode: 'insensitive' } },
       ];
     }
-    if (Number.isFinite(options?.minPrice) || Number.isFinite(options?.maxPrice)) {
+    if (
+      Number.isFinite(options?.minPrice) ||
+      Number.isFinite(options?.maxPrice)
+    ) {
       where.chambres = {
         some: {
           prixParNuit: {
-            ...(Number.isFinite(options?.minPrice) && { gte: options!.minPrice }),
-            ...(Number.isFinite(options?.maxPrice) && { lte: options!.maxPrice }),
+            ...(Number.isFinite(options?.minPrice) && {
+              gte: options!.minPrice,
+            }),
+            ...(Number.isFinite(options?.maxPrice) && {
+              lte: options!.maxPrice,
+            }),
           },
         },
       };
     }
 
-    const orderBy: any = options?.sortBy === 'note' ? { etoiles: 'desc' } : { id: 'desc' };
+    const orderBy: any =
+      options?.sortBy === 'note' ? { etoiles: 'desc' } : { id: 'desc' };
 
     if (!hasPagination) {
       return this.prisma.hotel.findMany({
@@ -157,7 +186,9 @@ export class HotelService {
     }
 
     const adults = Number.isFinite(dto.adults) ? Math.max(1, dto.adults) : 1;
-    const children = Number.isFinite(dto.children) ? Math.max(0, dto.children) : 0;
+    const children = Number.isFinite(dto.children)
+      ? Math.max(0, dto.children)
+      : 0;
     const totalGuests = adults + children;
 
     if (totalGuests < 1) {
@@ -189,8 +220,7 @@ export class HotelService {
     const matchingRooms = hotel.chambres
       .filter(
         (room) =>
-          room.capacite >= totalGuests &&
-          room.reservations.length === 0,
+          room.capacite >= totalGuests && room.reservations.length === 0,
       )
       .map((room) => ({
         id: room.id,
@@ -238,14 +268,20 @@ export class HotelService {
     search?: string;
     sortBy?: string;
   }): Promise<any> {
-    const guests = Number.isFinite(filters.guests) ? Math.max(1, filters.guests ?? 1) : 1;
-    const rooms = Number.isFinite(filters.rooms) ? Math.max(1, filters.rooms ?? 1) : 1;
+    const guests = Number.isFinite(filters.guests)
+      ? Math.max(1, filters.guests ?? 1)
+      : 1;
+    const rooms = Number.isFinite(filters.rooms)
+      ? Math.max(1, filters.rooms ?? 1)
+      : 1;
     const capacityPerRoom = Math.max(1, Math.ceil(guests / rooms));
     const hasCheckIn = Boolean(filters.checkIn);
     const hasCheckOut = Boolean(filters.checkOut);
 
     if (hasCheckIn !== hasCheckOut) {
-      throw new BadRequestException('checkIn and checkOut must be provided together');
+      throw new BadRequestException(
+        'checkIn and checkOut must be provided together',
+      );
     }
 
     let startDate: Date | null = null;
@@ -281,7 +317,10 @@ export class HotelService {
     const chambreWhere: any = {
       capacite: { gte: capacityPerRoom },
     };
-    if (Number.isFinite(filters.minPrice) || Number.isFinite(filters.maxPrice)) {
+    if (
+      Number.isFinite(filters.minPrice) ||
+      Number.isFinite(filters.maxPrice)
+    ) {
       chambreWhere.prixParNuit = {
         ...(Number.isFinite(filters.minPrice) && { gte: filters.minPrice }),
         ...(Number.isFinite(filters.maxPrice) && { lte: filters.maxPrice }),
@@ -359,7 +398,9 @@ export class HotelService {
       });
 
       if (!agency) {
-        throw new BadRequestException('Invalid agenceVoyageId: agency not found');
+        throw new BadRequestException(
+          'Invalid agenceVoyageId: agency not found',
+        );
       }
 
       if (!agency.actif) {

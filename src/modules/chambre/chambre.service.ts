@@ -8,11 +8,16 @@ export class ChambreService {
   constructor(private readonly prisma: PrismaService) {}
 
   create(dto: CreateChambreDto) {
-    return this.prisma.chambre.create({ data: dto, include: { typeChambre: true } });
+    return this.prisma.chambre.create({
+      data: dto,
+      include: { typeChambre: true },
+    });
   }
 
   findAll() {
-    return this.prisma.chambre.findMany({ include: { typeChambre: true, hotel: true } });
+    return this.prisma.chambre.findMany({
+      include: { typeChambre: true, hotel: true },
+    });
   }
 
   findOne(id: number) {

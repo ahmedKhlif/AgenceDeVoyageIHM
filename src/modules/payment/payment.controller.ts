@@ -29,7 +29,10 @@ export class PaymentController {
     @Param('sessionId') sessionId: string,
     @Query() query: CheckoutSessionSummaryDto,
   ) {
-    return this.paymentService.getCheckoutSessionSummary(sessionId, query.userId);
+    return this.paymentService.getCheckoutSessionSummary(
+      sessionId,
+      query.userId,
+    );
   }
 
   @Post('webhook')
@@ -43,7 +46,9 @@ export class PaymentController {
     }
 
     if (!(req.body instanceof Buffer)) {
-      throw new BadRequestException('Invalid webhook payload: expected raw body');
+      throw new BadRequestException(
+        'Invalid webhook payload: expected raw body',
+      );
     }
 
     return this.paymentService.handleWebhook(signature, req.body);

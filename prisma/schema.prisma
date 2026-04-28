@@ -33,6 +33,16 @@ enum StatutReclamation {
   FERMEE
 }
 
+enum AccountRole {
+  CLIENT
+  ADMIN
+}
+
+enum MailTemplateChannel {
+  EMAIL
+  SMS
+}
+
 // ─── Models ──────────────────────────────────────────────────────────────────
 
 model Account {
@@ -41,11 +51,13 @@ model Account {
   motDePasse      String
   dateInscription DateTime      @default(now())
   actif           Boolean       @default(true)
+  role            AccountRole   @default(CLIENT)
   stripeCustomerId String?      @unique
   profile         Profile?
   reservations    Reservation[]
   notifications   Notification[]
   paymentMethods  PaymentMethod[]
+  passwordResetTokens PasswordResetToken[]
 
   @@map("accounts")
 }
@@ -100,6 +112,7 @@ model AgenceVoyage {
   actif         Boolean      @default(true)
   hotels        Hotel[]
   reclamations  Reclamation[]
+  passwordResetTokens PasswordResetToken[]
 
   @@map("agences_voyage")
 }
@@ -276,4 +289,40 @@ model SystemConfig {
   conditionsAnnulation ConditionAnnulation[]
 
   @@map("system_configs")
+}
+
+model PasswordResetToken {
+  id             Int           @id @default(autoincrement())
+  email          String
+  tokenHash      String        @unique
+  expiresAt      DateTime
+  usedAt         DateTime?
+  createdAt      DateTime      @default(now())
+  accountId      Int?
+  agenceVoyageId Int?
+  account        Account?      @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  agenceVoyage   AgenceVoyage? @relation(fields: [agenceVoyageId], references: [id], onDelete: Cascade)
+
+  @@index([email, expiresAt])
+  @@index([accountId])
+  @@index([agenceVoyageId])
+  @@map("password_reset_tokens")
+}
+
+model MailTemplate {
+  id          Int                 @id @default(autoincrement())
+  slug        String              @unique
+  name        String
+  description String?
+  trigger     String
+  channel     MailTemplateChannel @default(EMAIL)
+  subject     String?
+  body        String
+  recipients  String?
+  type        String?
+  isActive    Boolean             @default(true)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@map("mail_templates")
 }

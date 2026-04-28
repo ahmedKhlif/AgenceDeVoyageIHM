@@ -1,4 +1,10 @@
-import { IsInt, IsNumber, IsBoolean, IsString, IsOptional } from 'class-validator';
+import {
+  IsInt,
+  IsNumber,
+  IsBoolean,
+  IsString,
+  IsOptional,
+} from 'class-validator';
 
 export class CreateConditionAnnulationDto {
   @IsInt()

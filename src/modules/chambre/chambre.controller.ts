@@ -1,4 +1,14 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, ParseIntPipe, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  ParseIntPipe,
+  Query,
+} from '@nestjs/common';
 import { ChambreService } from './chambre.service';
 import { CreateChambreDto } from './dto/create-chambre.dto';
 import { UpdateChambreDto } from './dto/update-chambre.dto';

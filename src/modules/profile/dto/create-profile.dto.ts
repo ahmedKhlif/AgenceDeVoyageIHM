@@ -42,9 +42,15 @@ export class CreateProfileDto {
 
   @IsString()
   @IsOptional()
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toUpperCase() : value))
-  @Length(6, 9, { message: 'Passport number must be between 6 and 9 characters.' })
-  @Matches(/^[A-Z0-9]+$/, { message: 'Passport number must contain only letters and numbers.' })
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toUpperCase() : value,
+  )
+  @Length(6, 9, {
+    message: 'Passport number must be between 6 and 9 characters.',
+  })
+  @Matches(/^[A-Z0-9]+$/, {
+    message: 'Passport number must contain only letters and numbers.',
+  })
   @Matches(/^(?=.*[A-Z])(?=.*\d)[A-Z0-9]+$/, {
     message: 'Passport number must include at least one letter and one number.',
   })

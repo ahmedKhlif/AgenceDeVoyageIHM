@@ -12,11 +12,16 @@ export class ConditionAnnulationService {
   }
 
   findAll() {
-    return this.prisma.conditionAnnulation.findMany({ include: { systemConfig: true } });
+    return this.prisma.conditionAnnulation.findMany({
+      include: { systemConfig: true },
+    });
   }
 
   findOne(id: number) {
-    return this.prisma.conditionAnnulation.findUnique({ where: { id }, include: { systemConfig: true } });
+    return this.prisma.conditionAnnulation.findUnique({
+      where: { id },
+      include: { systemConfig: true },
+    });
   }
 
   update(id: number, dto: UpdateConditionAnnulationDto) {

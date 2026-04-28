@@ -9,7 +9,10 @@ export class AvisService {
 
   async create(dto: CreateAvisDto) {
     const { reservationId, hotelId, accountId, authorName, ...rest } = dto;
-    const resolvedAuthorName = await this.resolveAuthorName(authorName, accountId);
+    const resolvedAuthorName = await this.resolveAuthorName(
+      authorName,
+      accountId,
+    );
 
     return this.prisma.avis.create({
       data: {
@@ -151,12 +154,19 @@ export class AvisService {
       return undefined;
     }
 
-    const fullName = `${profile.prenom?.trim() ?? ''} ${profile.nom?.trim() ?? ''}`.trim();
+    const fullName =
+      `${profile.prenom?.trim() ?? ''} ${profile.nom?.trim() ?? ''}`.trim();
     return fullName || undefined;
   }
 
-  private async resolveAuthorName(authorName?: string | null, accountId?: number | null) {
-    return this.normalizeAuthorName(authorName) || (await this.resolveProfileName(accountId));
+  private async resolveAuthorName(
+    authorName?: string | null,
+    accountId?: number | null,
+  ) {
+    return (
+      this.normalizeAuthorName(authorName) ||
+      (await this.resolveProfileName(accountId))
+    );
   }
 
   private async hydrateAuthorNames<
@@ -168,7 +178,11 @@ export class AvisService {
     const missingAccountIds = Array.from(
       new Set(
         reviews
-          .filter((review) => !this.normalizeAuthorName(review.authorName) && !!review.accountId)
+          .filter(
+            (review) =>
+              !this.normalizeAuthorName(review.authorName) &&
+              !!review.accountId,
+          )
           .map((review) => Number(review.accountId)),
       ),
     );
@@ -190,7 +204,8 @@ export class AvisService {
 
     const nameByAccountId = new Map(
       profiles.map((profile) => {
-        const fullName = `${profile.prenom?.trim() ?? ''} ${profile.nom?.trim() ?? ''}`.trim();
+        const fullName =
+          `${profile.prenom?.trim() ?? ''} ${profile.nom?.trim() ?? ''}`.trim();
         return [profile.accountId, fullName];
       }),
     );

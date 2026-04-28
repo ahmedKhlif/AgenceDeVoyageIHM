@@ -16,11 +16,17 @@ export class ProfileService {
   }
 
   update(id: number, dto: UpdateProfileDto) {
-    return this.prisma.profile.update({ where: { id }, data: this.normalizeProfileData(dto) });
+    return this.prisma.profile.update({
+      where: { id },
+      data: this.normalizeProfileData(dto),
+    });
   }
 
   private normalizeProfileData<
-    T extends { dateNaissance?: string | Date | null; numeroPasseport?: string | null },
+    T extends {
+      dateNaissance?: string | Date | null;
+      numeroPasseport?: string | null;
+    },
   >(data: T): T {
     const normalizedDate =
       data.dateNaissance &&

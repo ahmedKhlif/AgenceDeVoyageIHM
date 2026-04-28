@@ -1,11 +1,22 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, ParseIntPipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  ParseIntPipe,
+} from '@nestjs/common';
 import { ConditionAnnulationService } from './condition-annulation.service';
 import { CreateConditionAnnulationDto } from './dto/create-condition-annulation.dto';
 import { UpdateConditionAnnulationDto } from './dto/update-condition-annulation.dto';
 
 @Controller('conditions-annulation')
 export class ConditionAnnulationController {
-  constructor(private readonly conditionAnnulationService: ConditionAnnulationService) {}
+  constructor(
+    private readonly conditionAnnulationService: ConditionAnnulationService,
+  ) {}
 
   @Post()
   create(@Body() dto: CreateConditionAnnulationDto) {
@@ -23,7 +34,10 @@ export class ConditionAnnulationController {
   }
 
   @Patch(':id')
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateConditionAnnulationDto) {
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateConditionAnnulationDto,
+  ) {
     return this.conditionAnnulationService.update(id, dto);
   }
 

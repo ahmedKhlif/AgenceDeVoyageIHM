@@ -12,6 +12,7 @@ import Stripe from 'stripe';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationService } from '../notification/notification.service';
 import { CreateCheckoutSessionDto } from './dto/create-checkout-session.dto';
+import { MailService } from '../mail/mail.service';
 
 type HydratedReservation = {
   id: number;
@@ -48,17 +49,21 @@ export class PaymentService {
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
     private readonly notificationService: NotificationService,
+    private readonly mailService: MailService,
   ) {
     const stripeSecretKey = this.configService.get<string>('STRIPE_SECRET_KEY');
 
-    this.webhookSecret = this.configService.get<string>('STRIPE_WEBHOOK_SECRET') || '';
+    this.webhookSecret =
+      this.configService.get<string>('STRIPE_WEBHOOK_SECRET') || '';
     this.successUrl =
       this.configService.get<string>('STRIPE_SUCCESS_URL') ||
       'http://localhost:3000/payment/success';
     this.cancelUrl =
       this.configService.get<string>('STRIPE_CANCEL_URL') ||
       'http://localhost:3000/payment/cancel';
-    this.currency = (this.configService.get<string>('STRIPE_CURRENCY') || 'usd').toLowerCase();
+    this.currency = (
+      this.configService.get<string>('STRIPE_CURRENCY') || 'usd'
+    ).toLowerCase();
 
     this.stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
   }
@@ -86,7 +91,9 @@ export class PaymentService {
     }
 
     if (reservation.accountId !== dto.userId) {
-      throw new BadRequestException('Booking does not belong to the provided user');
+      throw new BadRequestException(
+        'Booking does not belong to the provided user',
+      );
     }
 
     if (reservation.chambre.hotelId !== dto.tripId) {
@@ -99,11 +106,15 @@ export class PaymentService {
       reservation.statut === StatutReservation.BLOQUEE ||
       reservation.statut === StatutReservation.TERMINEE
     ) {
-      throw new BadRequestException('This booking cannot be paid in its current status');
+      throw new BadRequestException(
+        'This booking cannot be paid in its current status',
+      );
     }
 
     if (reservation.statut === StatutReservation.CONFIRMEE) {
-      throw new BadRequestException('This booking has already been paid and confirmed');
+      throw new BadRequestException(
+        'This booking has already been paid and confirmed',
+      );
     }
 
     const expectedAmount = Number(reservation.montantTotal.toFixed(2));
@@ -137,7 +148,8 @@ export class PaymentService {
           tripId: reservation.chambre.hotelId.toString(),
           hotelName: reservation.chambre.hotel.nom,
           roomName:
-            reservation.chambre.typeChambre?.libelle || `Room ${reservation.chambre.numero}`,
+            reservation.chambre.typeChambre?.libelle ||
+            `Room ${reservation.chambre.numero}`,
           checkIn: reservation.dateArrivee.toISOString(),
           checkOut: reservation.dateDepart.toISOString(),
           guests: reservation.nombrePersonnes.toString(),
@@ -204,7 +216,9 @@ export class PaymentService {
     }
 
     if (session.payment_status !== 'paid') {
-      throw new BadRequestException('Payment is not completed for this checkout session');
+      throw new BadRequestException(
+        'Payment is not completed for this checkout session',
+      );
     }
 
     const bookingId = this.extractBookingId(session);
@@ -212,13 +226,16 @@ export class PaymentService {
       throw new BadRequestException('Invalid checkout session metadata');
     }
 
-    const reservationBeforeSync = await this.findReservationForSummary(bookingId);
+    const reservationBeforeSync =
+      await this.findReservationForSummary(bookingId);
     if (!reservationBeforeSync) {
       throw new NotFoundException('Booking not found');
     }
 
     if (reservationBeforeSync.accountId !== userId) {
-      throw new BadRequestException('Checkout session does not belong to the provided user');
+      throw new BadRequestException(
+        'Checkout session does not belong to the provided user',
+      );
     }
 
     await this.handleCheckoutSessionCompleted(session, 'sync');
@@ -229,7 +246,9 @@ export class PaymentService {
     }
 
     if (reservation.accountId !== userId) {
-      throw new BadRequestException('Checkout session does not belong to the provided user');
+      throw new BadRequestException(
+        'Checkout session does not belong to the provided user',
+      );
     }
 
     if (reservation.statut !== StatutReservation.CONFIRMEE) {
@@ -241,7 +260,9 @@ export class PaymentService {
     const roomPrice = Number(
       (reservation.chambre.prixParNuit * reservation.nombreNuits).toFixed(2),
     );
-    const taxes = Number(Math.max(0, reservation.montantTotal - roomPrice).toFixed(2));
+    const taxes = Number(
+      Math.max(0, reservation.montantTotal - roomPrice).toFixed(2),
+    );
 
     return {
       sessionId,
@@ -250,7 +271,8 @@ export class PaymentService {
       bookingReference: reservation.codeConfirmation,
       hotelName: reservation.chambre.hotel.nom,
       roomName:
-        reservation.chambre.typeChambre?.libelle || `Room ${reservation.chambre.numero}`,
+        reservation.chambre.typeChambre?.libelle ||
+        `Room ${reservation.chambre.numero}`,
       checkIn: reservation.dateArrivee,
       checkOut: reservation.dateDepart,
       nights: reservation.nombreNuits,
@@ -267,12 +289,18 @@ export class PaymentService {
     }
 
     if (!this.webhookSecret) {
-      throw new InternalServerErrorException('Missing STRIPE_WEBHOOK_SECRET environment variable');
+      throw new InternalServerErrorException(
+        'Missing STRIPE_WEBHOOK_SECRET environment variable',
+      );
     }
 
     let event: any;
     try {
-      event = this.stripe.webhooks.constructEvent(rawBody, signature, this.webhookSecret);
+      event = this.stripe.webhooks.constructEvent(
+        rawBody,
+        signature,
+        this.webhookSecret,
+      );
     } catch {
       throw new BadRequestException('Invalid Stripe webhook signature');
     }
@@ -283,6 +311,12 @@ export class PaymentService {
     ) {
       const session = event.data.object as any;
       await this.handleCheckoutSessionCompleted(session, 'webhook');
+    } else if (event.type === 'checkout.session.async_payment_failed') {
+      const session = event.data.object as any;
+      await this.handleCheckoutSessionFailed(session);
+    } else if (event.type === 'payment_intent.payment_failed') {
+      const paymentIntent = event.data.object as any;
+      await this.handlePaymentIntentFailed(paymentIntent);
     }
 
     return { received: true };
@@ -294,18 +328,18 @@ export class PaymentService {
   ) {
     const bookingId = this.extractBookingId(session);
     if (!bookingId) {
-      this.logger.warn(`Session ${session.id} received without valid bookingId`);
+      this.logger.warn(
+        `Session ${session.id} received without valid bookingId`,
+      );
       return;
     }
 
     const paymentIntentId = this.extractPaymentIntentId(session);
 
-    let finalized:
-      | {
-          changed: boolean;
-          reservation: HydratedReservation | null;
-        }
-      | null = null;
+    let finalized: {
+      changed: boolean;
+      reservation: HydratedReservation | null;
+    } | null = null;
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
@@ -342,9 +376,79 @@ export class PaymentService {
       checkInDate: finalized.reservation.dateArrivee,
     });
 
+    if (finalized.reservation.statut === StatutReservation.CONFIRMEE) {
+      const roomSubtotal = Number(
+        (
+          finalized.reservation.chambre.prixParNuit *
+          finalized.reservation.nombreNuits
+        ).toFixed(2),
+      );
+      const taxes = Number(
+        Math.max(0, finalized.reservation.montantTotal - roomSubtotal).toFixed(
+          2,
+        ),
+      );
+
+      await this.notificationService.sendPaymentReceipt({
+        accountId: finalized.reservation.accountId,
+        bookingReference: finalized.reservation.codeConfirmation,
+        hotelName: finalized.reservation.chambre.hotel.nom,
+        checkInDate: finalized.reservation.dateArrivee,
+        checkOutDate: finalized.reservation.dateDepart,
+        roomSubtotal,
+        taxes,
+        totalAmount: finalized.reservation.montantTotal,
+      });
+    }
+
     this.logger.log(
       `Reservation ${finalized.reservation.id} finalized after Stripe payment (source=${source}, status=${finalized.reservation.statut})`,
     );
+  }
+
+  private async handleCheckoutSessionFailed(session: any) {
+    const bookingId = this.extractBookingId(session);
+    if (!bookingId) {
+      return;
+    }
+
+    const reservation = await this.findReservationForSummary(bookingId);
+    if (!reservation) {
+      return;
+    }
+
+    await this.sendPaymentFailureAlert({
+      bookingReference: reservation.codeConfirmation,
+      hotelName: reservation.chambre.hotel.nom,
+      userName: `Account #${reservation.accountId}`,
+      failureReason:
+        session.payment_status || 'Checkout session payment failed',
+    });
+  }
+
+  private async handlePaymentIntentFailed(paymentIntent: any) {
+    const bookingId = Number.parseInt(
+      paymentIntent?.metadata?.bookingId || '',
+      10,
+    );
+    if (!Number.isFinite(bookingId) || bookingId <= 0) {
+      return;
+    }
+
+    const reservation = await this.findReservationForSummary(bookingId);
+    if (!reservation) {
+      return;
+    }
+
+    await this.sendPaymentFailureAlert({
+      bookingReference: reservation.codeConfirmation,
+      hotelName: reservation.chambre.hotel.nom,
+      userName: `Account #${reservation.accountId}`,
+      failureReason:
+        paymentIntent?.last_payment_error?.message ||
+        paymentIntent?.status ||
+        'Payment intent failed',
+    });
   }
 
   private async finalizeReservationPayment(
@@ -523,18 +627,52 @@ export class PaymentService {
     if (error && typeof error === 'object') {
       const stripeError = error as any;
       if (stripeError.type === 'StripeAuthenticationError') {
-        this.logger.error('Stripe authentication failed. Check STRIPE_SECRET_KEY.');
-        throw new ServiceUnavailableException('Payment provider is temporarily unavailable');
+        this.logger.error(
+          'Stripe authentication failed. Check STRIPE_SECRET_KEY.',
+        );
+        throw new ServiceUnavailableException(
+          'Payment provider is temporarily unavailable',
+        );
       }
       if (stripeError.type === 'StripeInvalidRequestError') {
         throw new BadRequestException(stripeError.message || fallbackMessage);
       }
       if (stripeError.type === 'StripeConnectionError') {
-        throw new ServiceUnavailableException('Payment provider connection failed');
+        throw new ServiceUnavailableException(
+          'Payment provider connection failed',
+        );
       }
     }
 
     this.logger.error(`${fallbackMessage}: ${error?.message || error}`);
     throw new InternalServerErrorException(fallbackMessage);
+  }
+
+  private async sendPaymentFailureAlert(input: {
+    bookingReference: string;
+    hotelName: string;
+    userName: string;
+    failureReason: string;
+  }) {
+    try {
+      await this.mailService.sendTemplate({
+        to: await this.mailService.getSupportEmail(),
+        templateSlug: 'ops.payment-failure-alert',
+        tokens: {
+          conf_code: input.bookingReference,
+          hotel_name: input.hotelName,
+          user_name: input.userName,
+          failure_reason: input.failureReason,
+        },
+        fallbackSubject: `Payment failure for booking ${input.bookingReference}`,
+        fallbackBody: `${input.failureReason}`,
+        actionLabel: 'Open reservations',
+        actionUrl: `${this.mailService.getAppWebUrl()}/admin/reservations`,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to send payment failure alert for ${input.bookingReference}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 }

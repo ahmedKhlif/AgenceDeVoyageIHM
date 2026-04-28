@@ -10,6 +10,7 @@ import { UpdateReservationDto } from './dto/update-reservation.dto';
 import { StatutReservation } from '@prisma/client';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { NotificationService } from '../notification/notification.service';
+import { MailService } from '../mail/mail.service';
 
 type CancellationEvaluation = {
   allowed: boolean;
@@ -28,6 +29,7 @@ export class ReservationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationService: NotificationService,
+    private readonly mailService: MailService,
   ) {}
   private readonly cityTaxPerNight = 5;
   private readonly blockingStatuses = [
@@ -71,19 +73,22 @@ export class ReservationService {
       description?: string | null;
     } | null;
   }): CancellationEvaluation {
-    const { status, checkInDate, totalPaid, roomPricePerNight, now, policy } = input;
+    const { status, checkInDate, totalPaid, roomPricePerNight, now, policy } =
+      input;
     const nowMs = now.getTime();
     const checkInMs = checkInDate.getTime();
     const isPastStart = nowMs >= checkInMs;
     const isAlreadyCancelled =
-      status === StatutReservation.ANNULEE || status === StatutReservation.REFUSEE;
+      status === StatutReservation.ANNULEE ||
+      status === StatutReservation.REFUSEE;
     const isClosedReservation = status === StatutReservation.TERMINEE;
 
     if (isAlreadyCancelled) {
       return {
         allowed: false,
         policyLabel: 'Booking already cancelled',
-        policyDescription: 'This reservation has already been cancelled and cannot be modified.',
+        policyDescription:
+          'This reservation has already been cancelled and cannot be modified.',
         freeCancellationUntil: null,
         refundType: 'NONE',
         refundAmount: 0,
@@ -97,7 +102,8 @@ export class ReservationService {
       return {
         allowed: false,
         policyLabel: 'Cancellation window closed',
-        policyDescription: 'This reservation can no longer be cancelled because the stay has started.',
+        policyDescription:
+          'This reservation can no longer be cancelled because the stay has started.',
         freeCancellationUntil: null,
         refundType: 'NONE',
         refundAmount: 0,
@@ -109,7 +115,9 @@ export class ReservationService {
 
     const defaultHours = 48;
     const deadlineHours = policy?.delaiLimiteHeures ?? defaultHours;
-    const freeCancellationUntil = new Date(checkInDate.getTime() - deadlineHours * 60 * 60 * 1000);
+    const freeCancellationUntil = new Date(
+      checkInDate.getTime() - deadlineHours * 60 * 60 * 1000,
+    );
     const beforeDeadline = nowMs <= freeCancellationUntil.getTime();
 
     if (beforeDeadline) {
@@ -127,8 +135,14 @@ export class ReservationService {
       };
     }
 
-    const configuredPenalty = Math.max(0, policy?.fraisAnnulation ?? roomPricePerNight);
-    const effectivePenalty = Math.min(totalPaid, configuredPenalty || roomPricePerNight);
+    const configuredPenalty = Math.max(
+      0,
+      policy?.fraisAnnulation ?? roomPricePerNight,
+    );
+    const effectivePenalty = Math.min(
+      totalPaid,
+      configuredPenalty || roomPricePerNight,
+    );
     const refundAmount = Math.max(0, totalPaid - effectivePenalty);
 
     return {
@@ -177,13 +191,19 @@ export class ReservationService {
         hotelName: reservation.chambre.hotel.nom,
         status: reservation.statut,
         checkInDate: reservation.dateArrivee,
+        checkOutDate: reservation.dateDepart,
+        guests: reservation.nombrePersonnes,
+        totalAmount: reservation.montantTotal,
       });
     }
 
     return reservation;
   }
 
-  private assertReservationOwnership(reservationAccountId: number, accountId?: number) {
+  private assertReservationOwnership(
+    reservationAccountId: number,
+    accountId?: number,
+  ) {
     if (accountId == null) {
       return;
     }
@@ -193,7 +213,9 @@ export class ReservationService {
     }
 
     if (reservationAccountId !== accountId) {
-      throw new ForbiddenException('You are not allowed to cancel this reservation');
+      throw new ForbiddenException(
+        'You are not allowed to cancel this reservation',
+      );
     }
   }
 
@@ -206,7 +228,9 @@ export class ReservationService {
     }
 
     const adults = Number.isFinite(dto.adults) ? Math.max(1, dto.adults) : 1;
-    const children = Number.isFinite(dto.children) ? Math.max(0, dto.children) : 0;
+    const children = Number.isFinite(dto.children)
+      ? Math.max(0, dto.children)
+      : 0;
     const totalGuests = adults + children;
 
     if (totalGuests < 1) {
@@ -225,7 +249,9 @@ export class ReservationService {
           });
 
     if (!account || !account.actif) {
-      throw new BadRequestException('Please sign in before confirming this reservation');
+      throw new BadRequestException(
+        'Please sign in before confirming this reservation',
+      );
     }
 
     const room = await this.prisma.chambre.findFirst({
@@ -253,7 +279,9 @@ export class ReservationService {
     }
 
     if (room.capacite < totalGuests) {
-      throw new BadRequestException('Selected room cannot host this number of guests');
+      throw new BadRequestException(
+        'Selected room cannot host this number of guests',
+      );
     }
 
     if (room.reservations.length > 0) {
@@ -265,7 +293,8 @@ export class ReservationService {
     const taxes = this.cityTaxPerNight * nights;
     const total = roomPrice + taxes;
     const bookingReference = this.generateBookingReference();
-    const paymentOption = dto.paymentOption === 'PAY_AT_HOTEL' ? 'PAY_AT_HOTEL' : 'PAY_NOW';
+    const paymentOption =
+      dto.paymentOption === 'PAY_AT_HOTEL' ? 'PAY_AT_HOTEL' : 'PAY_NOW';
     const payAtHotel = paymentOption === 'PAY_AT_HOTEL';
 
     const reservation = await this.prisma.reservation.create({
@@ -278,7 +307,9 @@ export class ReservationService {
         nombreNuits: nights,
         montantTotal: total,
         codeConfirmation: bookingReference,
-        statut: payAtHotel ? StatutReservation.CONFIRMEE : StatutReservation.EN_ATTENTE,
+        statut: payAtHotel
+          ? StatutReservation.CONFIRMEE
+          : StatutReservation.EN_ATTENTE,
         paymentStatus: payAtHotel ? 'PAY_AT_HOTEL' : 'PENDING',
       },
       include: {
@@ -308,6 +339,9 @@ export class ReservationService {
         hotelName: reservation.chambre.hotel.nom,
         status: reservation.statut,
         checkInDate: reservation.dateArrivee,
+        checkOutDate: reservation.dateDepart,
+        guests: reservation.nombrePersonnes,
+        totalAmount: reservation.montantTotal,
       });
     }
 
@@ -317,7 +351,8 @@ export class ReservationService {
       bookingId: reservation.id,
       hotelName: reservation.chambre.hotel.nom,
       roomName:
-        reservation.chambre.typeChambre?.libelle ?? `Room ${reservation.chambre.numero}`,
+        reservation.chambre.typeChambre?.libelle ??
+        `Room ${reservation.chambre.numero}`,
       checkIn: reservation.dateArrivee,
       checkOut: reservation.dateDepart,
       nights: reservation.nombreNuits,
@@ -362,7 +397,8 @@ export class ReservationService {
       bookingReference: reservation.codeConfirmation,
       hotelName: reservation.chambre.hotel.nom,
       roomName:
-        reservation.chambre.typeChambre?.libelle ?? `Room ${reservation.chambre.numero}`,
+        reservation.chambre.typeChambre?.libelle ??
+        `Room ${reservation.chambre.numero}`,
       stay: {
         checkIn: reservation.dateArrivee,
         checkOut: reservation.dateDepart,
@@ -402,7 +438,8 @@ export class ReservationService {
 
     if (!evaluation.allowed) {
       throw new BadRequestException(
-        evaluation.reason || 'This reservation cannot be cancelled at this time',
+        evaluation.reason ||
+          'This reservation cannot be cancelled at this time',
       );
     }
 
@@ -426,7 +463,33 @@ export class ReservationService {
       hotelName: updated.chambre.hotel.nom,
       status: updated.statut,
       checkInDate: updated.dateArrivee,
+      checkOutDate: updated.dateDepart,
+      guests: updated.nombrePersonnes,
+      totalAmount: updated.montantTotal,
     });
+
+    try {
+      await this.mailService.sendTemplate({
+        to: reservation.account.email,
+        templateSlug: 'reservation.refund-summary',
+        tokens: {
+          user_name:
+            reservation.account.profile?.prenom ||
+            reservation.account.email.split('@')[0],
+          conf_code: updated.codeConfirmation,
+          refund_type: evaluation.refundType,
+          refund_amount: `${evaluation.refundAmount.toFixed(2)} EUR`,
+          charge_amount: `${evaluation.chargeAmount.toFixed(2)} EUR`,
+          amount: `${evaluation.totalPaid.toFixed(2)} EUR`,
+        },
+        fallbackSubject: `Refund summary for booking ${updated.codeConfirmation}`,
+        fallbackBody: `Refund: ${evaluation.refundAmount.toFixed(2)} EUR`,
+        actionLabel: 'View booking',
+        actionUrl: `${this.mailService.getAppWebUrl()}/reservations/history`,
+      });
+    } catch {
+      // Cancellation succeeds even if the refund summary mail fails.
+    }
 
     return {
       cancelled: true,
@@ -434,7 +497,9 @@ export class ReservationService {
       bookingReference: updated.codeConfirmation,
       cancellationDate: cancellationTimestamp,
       hotelName: updated.chambre.hotel.nom,
-      roomName: updated.chambre.typeChambre?.libelle ?? `Room ${updated.chambre.numero}`,
+      roomName:
+        updated.chambre.typeChambre?.libelle ??
+        `Room ${updated.chambre.numero}`,
       stay: {
         checkIn: updated.dateArrivee,
         checkOut: updated.dateDepart,
@@ -449,16 +514,28 @@ export class ReservationService {
     };
   }
 
-  async findAll(options?: { page?: number; limit?: number }) {
+  async findAll(options?: {
+    page?: number;
+    limit?: number;
+    hotelId?: number;
+    status?: StatutReservation;
+    search?: string;
+    start?: string;
+    end?: string;
+  }) {
     const hasPagination =
       Number.isFinite(options?.page) &&
       Number.isFinite(options?.limit) &&
       (options?.page ?? 0) > 0 &&
       (options?.limit ?? 0) > 0;
 
+    const where = this.buildReservationFilters(options);
+
     if (!hasPagination) {
       return this.prisma.reservation.findMany({
+        where,
         include: { account: { include: { profile: true } }, chambre: true },
+        orderBy: { dateCreation: 'desc' },
       });
     }
 
@@ -468,12 +545,13 @@ export class ReservationService {
 
     const [items, total] = await Promise.all([
       this.prisma.reservation.findMany({
+        where,
         include: { account: { include: { profile: true } }, chambre: true },
         orderBy: { dateCreation: 'desc' },
         skip,
         take: limit,
       }),
-      this.prisma.reservation.count(),
+      this.prisma.reservation.count({ where }),
     ]);
 
     return {
@@ -499,7 +577,15 @@ export class ReservationService {
 
   async findByAccount(
     accountId: number,
-    options?: { page?: number; limit?: number; status?: StatutReservation; search?: string },
+    options?: {
+      page?: number;
+      limit?: number;
+      status?: StatutReservation;
+      search?: string;
+      hotelId?: number;
+      start?: string;
+      end?: string;
+    },
   ) {
     const hasPagination =
       Number.isFinite(options?.page) &&
@@ -507,17 +593,10 @@ export class ReservationService {
       (options?.page ?? 0) > 0 &&
       (options?.limit ?? 0) > 0;
 
-    const where: any = { accountId };
-    if (options?.status) {
-      where.statut = options.status;
-    }
-    if (options?.search) {
-      where.OR = [
-        { codeConfirmation: { contains: options.search, mode: 'insensitive' } },
-        { chambre: { hotel: { nom: { contains: options.search, mode: 'insensitive' } } } },
-        { chambre: { hotel: { ville: { contains: options.search, mode: 'insensitive' } } } },
-      ];
-    }
+    const where: any = {
+      ...this.buildReservationFilters(options),
+      accountId,
+    };
 
     if (!hasPagination) {
       return this.prisma.reservation.findMany({
@@ -579,13 +658,20 @@ export class ReservationService {
         hotelName: updated.chambre.hotel.nom,
         status: updated.statut,
         checkInDate: updated.dateArrivee,
+        checkOutDate: updated.dateDepart,
+        guests: updated.nombrePersonnes,
+        totalAmount: updated.montantTotal,
       });
     }
 
     return updated;
   }
 
-  async updateStatut(id: number, statut: StatutReservation, motifBlocage?: string) {
+  async updateStatut(
+    id: number,
+    statut: StatutReservation,
+    motifBlocage?: string,
+  ) {
     const updated = await this.prisma.reservation.update({
       where: { id },
       data: { statut, ...(motifBlocage ? { motifBlocage } : {}) },
@@ -600,6 +686,9 @@ export class ReservationService {
       hotelName: updated.chambre.hotel.nom,
       status: updated.statut,
       checkInDate: updated.dateArrivee,
+      checkOutDate: updated.dateDepart,
+      guests: updated.nombrePersonnes,
+      totalAmount: updated.montantTotal,
     });
 
     return updated;
@@ -607,5 +696,51 @@ export class ReservationService {
 
   remove(id: number) {
     return this.prisma.reservation.delete({ where: { id } });
+  }
+
+  private buildReservationFilters(options?: {
+    hotelId?: number;
+    status?: StatutReservation;
+    search?: string;
+    start?: string;
+    end?: string;
+  }) {
+    const where: any = {};
+
+    if (options?.hotelId) {
+      where.chambre = {
+        ...(where.chambre || {}),
+        hotelId: options.hotelId,
+      };
+    }
+
+    if (options?.status) {
+      where.statut = options.status;
+    }
+
+    if (options?.search) {
+      where.OR = [
+        { codeConfirmation: { contains: options.search, mode: 'insensitive' } },
+        {
+          chambre: {
+            hotel: { nom: { contains: options.search, mode: 'insensitive' } },
+          },
+        },
+        {
+          chambre: {
+            hotel: { ville: { contains: options.search, mode: 'insensitive' } },
+          },
+        },
+      ];
+    }
+
+    if (options?.start && options?.end) {
+      where.AND = [
+        { dateArrivee: { lt: new Date(options.end) } },
+        { dateDepart: { gt: new Date(options.start) } },
+      ];
+    }
+
+    return where;
   }
 }

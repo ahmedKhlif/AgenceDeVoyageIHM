@@ -1,4 +1,12 @@
-import { IsString, IsInt, IsBoolean, IsEmail, IsOptional, Min, Max } from 'class-validator';
+import {
+  IsString,
+  IsInt,
+  IsBoolean,
+  IsEmail,
+  IsOptional,
+  Min,
+  Max,
+} from 'class-validator';
 
 export class CreateHotelDto {
   @IsString()
@@ -27,7 +35,7 @@ export class CreateHotelDto {
 
   @IsString()
   telephone: string;
-  
+
   @IsOptional()
   latitude?: number;
 

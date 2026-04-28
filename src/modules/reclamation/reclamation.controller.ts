@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, ParseIntPipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  ParseIntPipe,
+} from '@nestjs/common';
 import { ReclamationService } from './reclamation.service';
 import { CreateReclamationDto } from './dto/create-reclamation.dto';
 import { UpdateReclamationDto } from './dto/update-reclamation.dto';
@@ -23,7 +32,10 @@ export class ReclamationController {
   }
 
   @Patch(':id')
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateReclamationDto) {
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateReclamationDto,
+  ) {
     return this.reclamationService.update(id, dto);
   }
 
