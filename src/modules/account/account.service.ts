@@ -918,7 +918,7 @@ export class AccountService {
   }
 
   private mapRole(role?: AccountRole | string | null) {
-    return role === AccountRole.ADMIN || role === 'ADMIN' ? 'admin' : 'client';
+    return String(role ?? '').toUpperCase() === 'ADMIN' ? 'admin' : 'client';
   }
 
   private sanitizeAccount<
