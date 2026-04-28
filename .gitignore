@@ -85,9 +85,6 @@ jspm_packages/
 *.sqlite
 *.sqlite3
 
-# Prisma
-prisma/migrations/*/migration.sql
-
 # IDE files
 .vscode/
 .idea/

@@ -268,6 +268,71 @@ export class AccountService {
     });
   }
 
+  async getWishlist(accountId: number) {
+    await this.ensureAccountExists(accountId);
+
+    const items = await this.prisma.wishlistHotel.findMany({
+      where: { accountId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        hotelId: true,
+      },
+    });
+
+    return {
+      accountId,
+      hotelIds: items.map((item) => item.hotelId),
+    };
+  }
+
+  async addWishlistHotel(accountId: number, hotelId: number) {
+    await this.ensureAccountExists(accountId);
+    await this.ensureHotelExists(hotelId);
+
+    await this.prisma.wishlistHotel.upsert({
+      where: {
+        accountId_hotelId: {
+          accountId,
+          hotelId,
+        },
+      },
+      update: {},
+      create: {
+        accountId,
+        hotelId,
+      },
+    });
+
+    const list = await this.getWishlist(accountId);
+    return {
+      success: true,
+      saved: true,
+      accountId,
+      hotelId,
+      hotelIds: list.hotelIds,
+    };
+  }
+
+  async removeWishlistHotel(accountId: number, hotelId: number) {
+    await this.ensureAccountExists(accountId);
+
+    await this.prisma.wishlistHotel.deleteMany({
+      where: {
+        accountId,
+        hotelId,
+      },
+    });
+
+    const list = await this.getWishlist(accountId);
+    return {
+      success: true,
+      removed: true,
+      accountId,
+      hotelId,
+      hotelIds: list.hotelIds,
+    };
+  }
+
   async createPaymentMethodSetupSession(
     accountId: number,
     dto: CreatePaymentMethodDto,
@@ -829,6 +894,28 @@ export class AccountService {
     }
 
     return paymentMethod;
+  }
+
+  private async ensureAccountExists(accountId: number) {
+    const account = await this.prisma.account.findUnique({
+      where: { id: accountId },
+      select: { id: true },
+    });
+
+    if (!account) {
+      throw new NotFoundException('Account not found');
+    }
+  }
+
+  private async ensureHotelExists(hotelId: number) {
+    const hotel = await this.prisma.hotel.findUnique({
+      where: { id: hotelId },
+      select: { id: true, actif: true },
+    });
+
+    if (!hotel || !hotel.actif) {
+      throw new NotFoundException('Hotel not found');
+    }
   }
 
   private extractSetupPaymentMethodId(setupIntent: any): string | null {

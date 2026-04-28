@@ -58,6 +58,7 @@ model Account {
   notifications   Notification[]
   paymentMethods  PaymentMethod[]
   passwordResetTokens PasswordResetToken[]
+  wishlistHotels  WishlistHotel[]
 
   @@map("accounts")
 }
@@ -136,8 +137,22 @@ model Hotel {
   chambres       Chambre[]
   offres         Offre[]
   avis           Avis[]
+  wishlistHotels WishlistHotel[]
 
   @@map("hotels")
+}
+
+model WishlistHotel {
+  accountId Int
+  hotelId   Int
+  createdAt DateTime @default(now())
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  hotel     Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@id([accountId, hotelId])
+  @@index([accountId])
+  @@index([hotelId])
+  @@map("wishlist_hotels")
 }
 
 model TypeChambre {

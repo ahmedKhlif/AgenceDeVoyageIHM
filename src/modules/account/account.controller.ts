@@ -17,6 +17,7 @@ import { ConfirmPaymentMethodSessionDto } from './dto/confirm-payment-method-ses
 import { UpdatePaymentMethodDto } from './dto/update-payment-method.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { AddWishlistHotelDto } from './dto/add-wishlist-hotel.dto';
 
 @Controller('accounts')
 export class AccountController {
@@ -115,6 +116,27 @@ export class AccountController {
       data.oldPassword,
       data.newPassword,
     );
+  }
+
+  @Get(':accountId/wishlist')
+  getWishlist(@Param('accountId', ParseIntPipe) accountId: number) {
+    return this.accountService.getWishlist(accountId);
+  }
+
+  @Post(':accountId/wishlist')
+  addWishlistHotel(
+    @Param('accountId', ParseIntPipe) accountId: number,
+    @Body() dto: AddWishlistHotelDto,
+  ) {
+    return this.accountService.addWishlistHotel(accountId, dto.hotelId);
+  }
+
+  @Delete(':accountId/wishlist/:hotelId')
+  removeWishlistHotel(
+    @Param('accountId', ParseIntPipe) accountId: number,
+    @Param('hotelId', ParseIntPipe) hotelId: number,
+  ) {
+    return this.accountService.removeWishlistHotel(accountId, hotelId);
   }
 }
 
