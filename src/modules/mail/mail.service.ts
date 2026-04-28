@@ -38,6 +38,7 @@ export class MailService implements OnModuleInit {
   private readonly user: string;
   private readonly pass: string;
   private readonly fromEmail: string;
+  private mailTemplateStoreAvailable: boolean | null = null;
 
   constructor(
     private readonly config: ConfigService,
@@ -66,17 +67,36 @@ export class MailService implements OnModuleInit {
   }
 
   async onModuleInit() {
-    await this.ensureDefaultTemplates();
+    try {
+      await this.ensureDefaultTemplates();
+    } catch (error: any) {
+      if (this.isMailTemplateStoreMissing(error)) {
+        this.mailTemplateStoreAvailable = false;
+        this.logger.warn(
+          'Mail template store is unavailable (table missing). Continuing without template persistence.',
+        );
+        return;
+      }
+      throw error;
+    }
   }
 
   async listTemplates() {
     await this.ensureDefaultTemplates();
+    if (this.mailTemplateStoreAvailable === false) {
+      return [];
+    }
     return this.prisma.mailTemplate.findMany({
       orderBy: [{ channel: 'asc' }, { name: 'asc' }],
     });
   }
 
   async updateTemplate(id: number, dto: UpdateMailTemplateDto) {
+    if (this.mailTemplateStoreAvailable === false) {
+      throw new Error(
+        'Mail templates are not available. Please run database migrations.',
+      );
+    }
     return this.prisma.mailTemplate.update({
       where: { id },
       data: {
@@ -225,6 +245,10 @@ export class MailService implements OnModuleInit {
   }
 
   async ensureDefaultTemplates() {
+    if (this.mailTemplateStoreAvailable === false) {
+      return;
+    }
+
     await Promise.all(
       defaultMailTemplates.map((template) =>
         this.prisma.mailTemplate.upsert({
@@ -241,13 +265,28 @@ export class MailService implements OnModuleInit {
         }),
       ),
     );
+    this.mailTemplateStoreAvailable = true;
   }
 
   private async resolveTemplate(slug: string) {
     await this.ensureDefaultTemplates();
+    if (this.mailTemplateStoreAvailable === false) {
+      return null;
+    }
     return this.prisma.mailTemplate.findUnique({
       where: { slug },
     });
+  }
+
+  private isMailTemplateStoreMissing(error: any) {
+    const code = error?.code;
+    const text = String(error?.message || '').toLowerCase();
+    return (
+      code === 'P2021' ||
+      code === 'P2022' ||
+      text.includes('mail_templates') ||
+      text.includes('tabledoesnotexist')
+    );
   }
 
   private renderTokens(value: string, tokens: MailTokens) {

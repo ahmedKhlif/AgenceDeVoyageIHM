@@ -107,10 +107,29 @@ export class AccountService {
       include: { profile: true },
     });
     if (account) {
-      const accountPasswordValid = await bcrypt.compare(
-        password,
-        account.motDePasse,
-      );
+      let accountPasswordValid = false;
+      const storedPassword = account.motDePasse || '';
+      const isBcryptHash =
+        storedPassword.startsWith('$2a$') ||
+        storedPassword.startsWith('$2b$') ||
+        storedPassword.startsWith('$2y$');
+
+      if (isBcryptHash) {
+        // Some legacy datasets use $2y$; bcrypt expects $2b$ semantics.
+        const normalizedHash = storedPassword.startsWith('$2y$')
+          ? `$2b$${storedPassword.slice(4)}`
+          : storedPassword;
+        accountPasswordValid = await bcrypt.compare(password, normalizedHash);
+      } else if (password === storedPassword) {
+        // Legacy plain-text password migration path.
+        accountPasswordValid = true;
+        const migratedHash = await bcrypt.hash(password, 10);
+        await this.prisma.account.update({
+          where: { id: account.id },
+          data: { motDePasse: migratedHash },
+        });
+      }
+
       if (!accountPasswordValid) {
         throw new UnauthorizedException('Invalid credentials');
       }
