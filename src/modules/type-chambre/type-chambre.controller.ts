@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, ParseIntPipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  ParseIntPipe,
+} from '@nestjs/common';
 import { TypeChambreService } from './type-chambre.service';
 import { CreateTypeChambreDto } from './dto/create-type-chambre.dto';
 import { UpdateTypeChambreDto } from './dto/update-type-chambre.dto';
@@ -23,7 +32,10 @@ export class TypeChambreController {
   }
 
   @Patch(':id')
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateTypeChambreDto) {
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateTypeChambreDto,
+  ) {
     return this.typeChambreService.update(id, dto);
   }
 

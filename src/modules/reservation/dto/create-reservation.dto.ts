@@ -1,4 +1,11 @@
-import { IsInt, IsDateString, IsNumber, IsString, IsEnum, IsOptional } from 'class-validator';
+import {
+  IsInt,
+  IsDateString,
+  IsNumber,
+  IsString,
+  IsEnum,
+  IsOptional,
+} from 'class-validator';
 import { StatutReservation } from '@prisma/client';
 
 export class CreateReservationDto {

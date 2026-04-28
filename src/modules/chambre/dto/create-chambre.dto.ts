@@ -1,4 +1,11 @@
-import { IsString, IsInt, IsNumber, IsBoolean, IsArray, IsOptional } from 'class-validator';
+import {
+  IsString,
+  IsInt,
+  IsNumber,
+  IsBoolean,
+  IsArray,
+  IsOptional,
+} from 'class-validator';
 
 export class CreateChambreDto {
   @IsString()

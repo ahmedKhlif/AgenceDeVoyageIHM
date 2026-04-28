@@ -1,4 +1,14 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, ParseIntPipe, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  ParseIntPipe,
+  Query,
+} from '@nestjs/common';
 import { ReservationService } from './reservation.service';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { UpdateReservationDto } from './dto/update-reservation.dto';
@@ -15,21 +25,29 @@ export class ReservationController {
   @Get()
   findAll(
     @Query('accountId') accountId?: string,
+    @Query('hotelId') hotelId?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('status') status?: string,
     @Query('search') search?: string,
+    @Query('start') start?: string,
+    @Query('end') end?: string,
   ) {
     const parsedPage = page ? Number.parseInt(page, 10) : undefined;
     const parsedLimit = limit ? Number.parseInt(limit, 10) : undefined;
+    const parsedHotelId = hotelId ? Number.parseInt(hotelId, 10) : undefined;
     const options = {
       page: Number.isFinite(parsedPage) ? parsedPage : undefined,
       limit: Number.isFinite(parsedLimit) ? parsedLimit : undefined,
       status: status as any,
       search,
+      hotelId: Number.isFinite(parsedHotelId) ? parsedHotelId : undefined,
+      start,
+      end,
     };
 
-    if (accountId) return this.reservationService.findByAccount(+accountId, options);
+    const accountIdNum = accountId ? +accountId : undefined;
+    return this.reservationService.findByAccount(accountIdNum, options);
     return this.reservationService.findAll(options);
   }
 
@@ -39,7 +57,10 @@ export class ReservationController {
   }
 
   @Patch(':id')
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateReservationDto) {
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateReservationDto,
+  ) {
     return this.reservationService.update(id, dto);
   }
 

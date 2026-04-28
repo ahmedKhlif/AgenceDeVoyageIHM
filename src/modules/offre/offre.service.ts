@@ -18,6 +18,7 @@ export class OffreService {
         hotel: {
           select: {
             nom: true,
+            ville: true,
           },
         },
       },
@@ -28,6 +29,7 @@ export class OffreService {
       tauxRemise: offer.tauxRemise,
       hotelId: offer.hotelId,
       hotelName: offer.hotel?.nom,
+      hotelCity: offer.hotel?.ville,
     });
 
     return offer;

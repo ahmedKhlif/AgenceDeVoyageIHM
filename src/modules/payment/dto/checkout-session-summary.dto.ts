@@ -7,4 +7,3 @@ export class CheckoutSessionSummaryDto {
   @Min(1)
   userId: number;
 }
-

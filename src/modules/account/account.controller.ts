@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, ParseIntPipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  ParseIntPipe,
+} from '@nestjs/common';
 import { AccountService } from './account.service';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
@@ -6,6 +15,8 @@ import { UpdateProfileDto } from '../profile/dto/update-profile.dto';
 import { CreatePaymentMethodDto } from './dto/create-payment-method.dto';
 import { ConfirmPaymentMethodSessionDto } from './dto/confirm-payment-method-session.dto';
 import { UpdatePaymentMethodDto } from './dto/update-payment-method.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @Controller('accounts')
 export class AccountController {
@@ -67,7 +78,10 @@ export class AccountController {
     @Param('accountId', ParseIntPipe) accountId: number,
     @Body() dto: ConfirmPaymentMethodSessionDto,
   ) {
-    return this.accountService.confirmPaymentMethodSetupSession(accountId, dto.sessionId);
+    return this.accountService.confirmPaymentMethodSetupSession(
+      accountId,
+      dto.sessionId,
+    );
   }
 
   @Patch(':accountId/payment-methods/:paymentMethodId')
@@ -76,7 +90,11 @@ export class AccountController {
     @Param('paymentMethodId', ParseIntPipe) paymentMethodId: number,
     @Body() dto: UpdatePaymentMethodDto,
   ) {
-    return this.accountService.updatePaymentMethod(accountId, paymentMethodId, dto);
+    return this.accountService.updatePaymentMethod(
+      accountId,
+      paymentMethodId,
+      dto,
+    );
   }
 
   @Delete(':accountId/payment-methods/:paymentMethodId')
@@ -90,9 +108,13 @@ export class AccountController {
   @Patch(':accountId/change-password')
   changePassword(
     @Param('accountId', ParseIntPipe) accountId: number,
-    @Body() data: { oldPassword: string; newPassword: string }
+    @Body() data: { oldPassword: string; newPassword: string },
   ) {
-    return this.accountService.changePassword(accountId, data.oldPassword, data.newPassword);
+    return this.accountService.changePassword(
+      accountId,
+      data.oldPassword,
+      data.newPassword,
+    );
   }
 }
 
@@ -111,7 +133,25 @@ export class AuthController {
   }
 
   @Post('google')
-  googleLogin(@Body() body: { email: string; firstName: string; lastName: string; uid: string }) {
+  googleLogin(
+    @Body()
+    body: {
+      email: string;
+      firstName: string;
+      lastName: string;
+      uid: string;
+    },
+  ) {
     return this.accountService.googleLogin(body);
+  }
+
+  @Post('forgot-password')
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.accountService.forgotPassword(dto.email);
+  }
+
+  @Post('reset-password')
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.accountService.resetPassword(dto.token, dto.newPassword);
   }
 }

@@ -1,5 +1,13 @@
 import { Type } from 'class-transformer';
-import { IsDateString, IsEmail, IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import {
+  IsDateString,
+  IsEmail,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 
 export class CreateBookingDto {
   @Type(() => Number)

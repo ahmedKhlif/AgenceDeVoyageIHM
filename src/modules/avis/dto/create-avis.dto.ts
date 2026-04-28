@@ -1,4 +1,11 @@
-import { IsInt, IsString, IsBoolean, IsOptional, Min, Max } from 'class-validator';
+import {
+  IsInt,
+  IsString,
+  IsBoolean,
+  IsOptional,
+  Min,
+  Max,
+} from 'class-validator';
 
 export class CreateAvisDto {
   @IsInt()
@@ -30,4 +37,3 @@ export class CreateAvisDto {
   @IsOptional()
   valide?: boolean;
 }
-

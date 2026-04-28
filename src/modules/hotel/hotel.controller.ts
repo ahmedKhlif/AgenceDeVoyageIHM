@@ -1,4 +1,14 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, ParseIntPipe, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  ParseIntPipe,
+  Query,
+} from '@nestjs/common';
 import { HotelService } from './hotel.service';
 import { CreateHotelDto } from './dto/create-hotel.dto';
 import { UpdateHotelDto } from './dto/update-hotel.dto';
@@ -27,10 +37,16 @@ export class HotelController {
     const parsedPage = page ? Number.parseInt(page, 10) : undefined;
     const parsedLimit = limit ? Number.parseInt(limit, 10) : undefined;
     const parsedIds = ids
-      ? ids.split(',').map((id) => Number.parseInt(id, 10)).filter((id) => !Number.isNaN(id))
+      ? ids
+          .split(',')
+          .map((id) => Number.parseInt(id, 10))
+          .filter((id) => !Number.isNaN(id))
       : undefined;
     const parsedStars = stars
-      ? stars.split(',').map((s) => Number.parseInt(s, 10)).filter((s) => !Number.isNaN(s))
+      ? stars
+          .split(',')
+          .map((s) => Number.parseInt(s, 10))
+          .filter((s) => !Number.isNaN(s))
       : undefined;
     const parsedMinPrice = minPrice ? Number.parseInt(minPrice, 10) : undefined;
     const parsedMaxPrice = maxPrice ? Number.parseInt(maxPrice, 10) : undefined;
@@ -70,7 +86,10 @@ export class HotelController {
     const parsedPage = page ? Number.parseInt(page, 10) : undefined;
     const parsedLimit = limit ? Number.parseInt(limit, 10) : undefined;
     const parsedStars = stars
-      ? stars.split(',').map((s) => Number.parseInt(s, 10)).filter((s) => !Number.isNaN(s))
+      ? stars
+          .split(',')
+          .map((s) => Number.parseInt(s, 10))
+          .filter((s) => !Number.isNaN(s))
       : undefined;
     const parsedMinPrice = minPrice ? Number.parseInt(minPrice, 10) : undefined;
     const parsedMaxPrice = maxPrice ? Number.parseInt(maxPrice, 10) : undefined;

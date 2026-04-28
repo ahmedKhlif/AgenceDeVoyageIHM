@@ -1,13 +1,14 @@
 import {
   BadRequestException,
-  Injectable,
   InternalServerErrorException,
+  Injectable,
   Logger,
   NotFoundException,
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { AccountRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
@@ -15,7 +16,9 @@ import { UpdateProfileDto } from '../profile/dto/update-profile.dto';
 import { CreatePaymentMethodDto } from './dto/create-payment-method.dto';
 import { UpdatePaymentMethodDto } from './dto/update-payment-method.dto';
 import * as bcrypt from 'bcrypt';
+import { createHash, randomBytes } from 'crypto';
 import Stripe from 'stripe';
+import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class AccountService {
@@ -27,6 +30,7 @@ export class AccountService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly mailService: MailService,
   ) {
     const stripeSecretKey = this.configService.get<string>('STRIPE_SECRET_KEY');
     this.setupSuccessUrl =
@@ -40,25 +44,55 @@ export class AccountService {
 
   async create(dto: CreateAccountDto) {
     const hashedPassword = await bcrypt.hash(dto.motDePasse, 10);
-    return this.prisma.account.create({
+    const created = await this.prisma.account.create({
       data: {
-        ...dto,
+        email: dto.email.trim().toLowerCase(),
         motDePasse: hashedPassword,
+        actif: dto.actif ?? true,
+        role: dto.role ?? AccountRole.CLIENT,
       },
       include: { profile: true },
     });
+
+    await this.sendWelcomeEmail(
+      created.email,
+      created.profile?.prenom || 'Traveler',
+    );
+    return this.sanitizeAccount(created);
   }
 
-  findAll() {
-    return this.prisma.account.findMany({ include: { profile: true } });
+  async findAll() {
+    const accounts = await this.prisma.account.findMany({
+      include: { profile: true },
+    });
+    return accounts.map((account) => this.sanitizeAccount(account));
   }
 
-  findOne(id: number) {
-    return this.prisma.account.findUnique({ where: { id }, include: { profile: true } });
+  async findOne(id: number) {
+    const account = await this.prisma.account.findUnique({
+      where: { id },
+      include: { profile: true },
+    });
+    return account ? this.sanitizeAccount(account) : null;
   }
 
-  update(id: number, dto: UpdateAccountDto) {
-    return this.prisma.account.update({ where: { id }, data: dto });
+  async update(id: number, dto: UpdateAccountDto) {
+    const account = await this.prisma.account.update({
+      where: { id },
+      data: {
+        ...(dto.email !== undefined
+          ? { email: dto.email.trim().toLowerCase() }
+          : {}),
+        ...(dto.actif !== undefined ? { actif: dto.actif } : {}),
+        ...(dto.role !== undefined ? { role: dto.role } : {}),
+        ...(dto.motDePasse !== undefined
+          ? { motDePasse: await bcrypt.hash(dto.motDePasse, 10) }
+          : {}),
+      },
+      include: { profile: true },
+    });
+
+    return this.sanitizeAccount(account);
   }
 
   remove(id: number) {
@@ -73,16 +107,15 @@ export class AccountService {
       include: { profile: true },
     });
     if (account) {
-      const accountPasswordValid = await bcrypt.compare(password, account.motDePasse);
+      const accountPasswordValid = await bcrypt.compare(
+        password,
+        account.motDePasse,
+      );
       if (!accountPasswordValid) {
         throw new UnauthorizedException('Invalid credentials');
       }
 
-      const { motDePasse, ...result } = account;
-      return {
-        ...result,
-        role: result.email.toLowerCase().includes('admin') ? 'admin' : 'client',
-      };
+      return this.sanitizeAccount(account);
     }
 
     const agency = await this.prisma.agenceVoyage.findUnique({
@@ -94,7 +127,10 @@ export class AccountService {
     }
 
     let agencyPasswordValid = false;
-    if (agency.motDePasse.startsWith('$2a$') || agency.motDePasse.startsWith('$2b$')) {
+    if (
+      agency.motDePasse.startsWith('$2a$') ||
+      agency.motDePasse.startsWith('$2b$')
+    ) {
       agencyPasswordValid = await bcrypt.compare(password, agency.motDePasse);
     } else if (password === agency.motDePasse) {
       agencyPasswordValid = true;
@@ -119,7 +155,12 @@ export class AccountService {
     };
   }
 
-  async googleLogin(data: { email: string; firstName: string; lastName: string; uid: string }) {
+  async googleLogin(data: {
+    email: string;
+    firstName: string;
+    lastName: string;
+    uid: string;
+  }) {
     let account = await this.prisma.account.findUnique({
       where: { email: data.email },
       include: { profile: true },
@@ -127,24 +168,29 @@ export class AccountService {
 
     if (!account) {
       // Create new account with dummy password
-      const dummyPassword = await bcrypt.hash(data.uid + Math.random().toString(), 10);
+      const dummyPassword = await bcrypt.hash(
+        data.uid + Math.random().toString(),
+        10,
+      );
       account = await this.prisma.account.create({
         data: {
           email: data.email,
           motDePasse: dummyPassword,
+          role: AccountRole.CLIENT,
           profile: {
             create: {
               nom: data.lastName || '',
               prenom: data.firstName || 'Google User',
-            }
-          }
+            },
+          },
         },
         include: { profile: true },
       });
+
+      await this.sendWelcomeEmail(account.email, data.firstName || 'Traveler');
     }
 
-    const { motDePasse, ...result } = account;
-    return result;
+    return this.sanitizeAccount(account);
   }
 
   async getProfile(accountId: number) {
@@ -171,7 +217,8 @@ export class AccountService {
       throw new NotFoundException('Account not found');
     }
 
-    const { accountId: _ignored, ...profileData } = this.normalizeProfileData(data);
+    const { accountId: _ignored, ...profileData } =
+      this.normalizeProfileData(data);
 
     return this.prisma.profile.upsert({
       where: { accountId },
@@ -201,7 +248,10 @@ export class AccountService {
     });
   }
 
-  async createPaymentMethodSetupSession(accountId: number, dto: CreatePaymentMethodDto) {
+  async createPaymentMethodSetupSession(
+    accountId: number,
+    dto: CreatePaymentMethodDto,
+  ) {
     if (!this.stripe) {
       throw new InternalServerErrorException('Stripe is not configured');
     }
@@ -220,7 +270,8 @@ export class AccountService {
     }
 
     const stripeCustomerId = await this.ensureStripeCustomer(accountId);
-    const shouldBeDefault = dto.isDefault ?? account.paymentMethods.length === 0;
+    const shouldBeDefault =
+      dto.isDefault ?? account.paymentMethods.length === 0;
 
     let session: any;
     try {
@@ -244,7 +295,10 @@ export class AccountService {
         },
       });
     } catch (error) {
-      this.rethrowStripeError(error, 'Unable to initialize Stripe setup session');
+      this.rethrowStripeError(
+        error,
+        'Unable to initialize Stripe setup session',
+      );
     }
 
     if (!session.url) {
@@ -262,7 +316,9 @@ export class AccountService {
       throw new InternalServerErrorException('Stripe is not configured');
     }
 
-    const account = await this.prisma.account.findUnique({ where: { id: accountId } });
+    const account = await this.prisma.account.findUnique({
+      where: { id: accountId },
+    });
     if (!account) {
       throw new NotFoundException('Account not found');
     }
@@ -280,9 +336,14 @@ export class AccountService {
       throw new BadRequestException('Stripe setup session is not completed');
     }
 
-    const metadataAccountId = Number.parseInt(session.metadata?.accountId || '', 10);
+    const metadataAccountId = Number.parseInt(
+      session.metadata?.accountId || '',
+      10,
+    );
     if (metadataAccountId !== accountId) {
-      throw new BadRequestException('Setup session does not belong to this account');
+      throw new BadRequestException(
+        'Setup session does not belong to this account',
+      );
     }
 
     const stripeCustomerId = await this.ensureStripeCustomer(accountId);
@@ -292,12 +353,16 @@ export class AccountService {
         : session.setup_intent;
     const stripePaymentMethodId = this.extractSetupPaymentMethodId(setupIntent);
     if (!stripePaymentMethodId) {
-      throw new BadRequestException('Setup session is missing a payment method');
+      throw new BadRequestException(
+        'Setup session is missing a payment method',
+      );
     }
 
     let stripePaymentMethod: any;
     try {
-      stripePaymentMethod = await this.stripe.paymentMethods.retrieve(stripePaymentMethodId);
+      stripePaymentMethod = await this.stripe.paymentMethods.retrieve(
+        stripePaymentMethodId,
+      );
     } catch (error) {
       this.rethrowStripeError(error, 'Unable to fetch Stripe payment method');
     }
@@ -309,7 +374,10 @@ export class AccountService {
       typeof stripePaymentMethod.customer === 'string'
         ? stripePaymentMethod.customer
         : stripePaymentMethod.customer?.id || null;
-    if (paymentMethodCustomerId && paymentMethodCustomerId !== stripeCustomerId) {
+    if (
+      paymentMethodCustomerId &&
+      paymentMethodCustomerId !== stripeCustomerId
+    ) {
       throw new BadRequestException('Payment method customer mismatch');
     }
     if (!paymentMethodCustomerId) {
@@ -318,7 +386,10 @@ export class AccountService {
           customer: stripeCustomerId,
         });
       } catch (error) {
-        this.rethrowStripeError(error, 'Unable to attach payment method to customer');
+        this.rethrowStripeError(
+          error,
+          'Unable to attach payment method to customer',
+        );
       }
     }
 
@@ -328,7 +399,9 @@ export class AccountService {
       const existing = await tx.paymentMethod.findFirst({
         where: { accountId, stripePaymentMethodId },
       });
-      const existingAny = existing || (await tx.paymentMethod.findFirst({ where: { accountId } }));
+      const existingAny =
+        existing ||
+        (await tx.paymentMethod.findFirst({ where: { accountId } }));
       const shouldSetDefault = shouldBeDefault || !existingAny;
 
       if (shouldBeDefault) {
@@ -362,7 +435,10 @@ export class AccountService {
     });
 
     if (saved.isDefault) {
-      await this.syncStripeDefaultPaymentMethod(accountId, stripePaymentMethodId);
+      await this.syncStripeDefaultPaymentMethod(
+        accountId,
+        stripePaymentMethodId,
+      );
     }
 
     return saved;
@@ -373,7 +449,10 @@ export class AccountService {
     paymentMethodId: number,
     dto: UpdatePaymentMethodDto,
   ) {
-    const existing = await this.ensurePaymentMethodOwnership(accountId, paymentMethodId);
+    const existing = await this.ensurePaymentMethodOwnership(
+      accountId,
+      paymentMethodId,
+    );
 
     const updated = await this.prisma.$transaction(async (tx) => {
       if (dto.isDefault !== true) {
@@ -394,14 +473,20 @@ export class AccountService {
     });
 
     if (dto.isDefault === true) {
-      await this.syncStripeDefaultPaymentMethod(accountId, updated.stripePaymentMethodId);
+      await this.syncStripeDefaultPaymentMethod(
+        accountId,
+        updated.stripePaymentMethodId,
+      );
     }
 
     return updated;
   }
 
   async removePaymentMethod(accountId: number, paymentMethodId: number) {
-    const existing = await this.ensurePaymentMethodOwnership(accountId, paymentMethodId);
+    const existing = await this.ensurePaymentMethodOwnership(
+      accountId,
+      paymentMethodId,
+    );
 
     const nextDefault = await this.prisma.$transaction(async (tx) => {
       await tx.paymentMethod.delete({ where: { id: paymentMethodId } });
@@ -438,9 +523,14 @@ export class AccountService {
     }
   }
 
-  async changePassword(accountId: number, oldPassword: string, newPassword: string) {
+  async changePassword(
+    accountId: number,
+    oldPassword: string,
+    newPassword: string,
+  ) {
     const account = await this.prisma.account.findUnique({
-      where: { id: accountId }
+      where: { id: accountId },
+      include: { profile: true },
     });
 
     if (!account) {
@@ -456,10 +546,158 @@ export class AccountService {
     // Hash new password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-    return this.prisma.account.update({
+    await this.prisma.account.update({
       where: { id: accountId },
-      data: { motDePasse: hashedPassword }
+      data: { motDePasse: hashedPassword },
     });
+
+    await this.sendPasswordChangedEmail(
+      account.email,
+      account.profile?.prenom || 'Traveler',
+    );
+
+    return { success: true };
+  }
+
+  async forgotPassword(email: string) {
+    const normalizedEmail = email.trim().toLowerCase();
+    const account = await this.prisma.account.findUnique({
+      where: { email: normalizedEmail },
+      select: {
+        id: true,
+        email: true,
+        actif: true,
+        profile: {
+          select: {
+            prenom: true,
+          },
+        },
+      },
+    });
+    const agency = await this.prisma.agenceVoyage.findUnique({
+      where: { email: normalizedEmail },
+    });
+
+    if ((!account || !account.actif) && (!agency || !agency.actif)) {
+      return {
+        success: true,
+        message:
+          'If an account exists for this email, a reset link has been sent.',
+      };
+    }
+
+    await this.prisma.passwordResetToken.updateMany({
+      where: {
+        email: normalizedEmail,
+        usedAt: null,
+      },
+      data: {
+        usedAt: new Date(),
+      },
+    });
+
+    const rawToken = randomBytes(32).toString('hex');
+    const tokenHash = this.hashResetToken(rawToken);
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+
+    await this.prisma.passwordResetToken.create({
+      data: {
+        email: normalizedEmail,
+        tokenHash,
+        expiresAt,
+        accountId: account?.id,
+        agenceVoyageId: agency?.id,
+      },
+    });
+
+    const resetUrl = `${this.mailService.getAppWebUrl()}/reset-password?token=${encodeURIComponent(rawToken)}`;
+    const userName =
+      account?.profile?.prenom ||
+      agency?.nomAgence ||
+      normalizedEmail.split('@')[0] ||
+      'Traveler';
+
+    await this.mailService.sendTemplate({
+      to: normalizedEmail,
+      templateSlug: 'auth.reset-password',
+      tokens: {
+        user_name: userName,
+        reset_url: resetUrl,
+        expires_in: '60 minutes',
+      },
+      fallbackSubject: 'Reset your VoyageHub password',
+      fallbackBody: `Use this secure link to reset your password: ${resetUrl}`,
+      actionLabel: 'Reset Password',
+      actionUrl: resetUrl,
+    });
+
+    return {
+      success: true,
+      message:
+        'If an account exists for this email, a reset link has been sent.',
+    };
+  }
+
+  async resetPassword(token: string, newPassword: string) {
+    const normalizedToken = token.trim();
+    if (!normalizedToken) {
+      throw new BadRequestException('Reset token is required');
+    }
+
+    const tokenHash = this.hashResetToken(normalizedToken);
+    const resetToken = await this.prisma.passwordResetToken.findUnique({
+      where: { tokenHash },
+      include: {
+        account: {
+          include: { profile: true },
+        },
+        agenceVoyage: true,
+      },
+    });
+
+    if (!resetToken || resetToken.usedAt || resetToken.expiresAt < new Date()) {
+      throw new BadRequestException(
+        'This reset link is invalid or has expired',
+      );
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    if (resetToken.accountId) {
+      await this.prisma.account.update({
+        where: { id: resetToken.accountId },
+        data: { motDePasse: hashedPassword },
+      });
+
+      await this.sendPasswordChangedEmail(
+        resetToken.email,
+        resetToken.account?.profile?.prenom || 'Traveler',
+      );
+    } else if (resetToken.agenceVoyageId) {
+      await this.prisma.agenceVoyage.update({
+        where: { id: resetToken.agenceVoyageId },
+        data: { motDePasse: hashedPassword },
+      });
+
+      await this.sendPasswordChangedEmail(
+        resetToken.email,
+        resetToken.agenceVoyage?.nomAgence || 'VoyageHub Admin',
+      );
+    } else {
+      throw new InternalServerErrorException(
+        'Reset token is not linked to a valid account',
+      );
+    }
+
+    await this.prisma.passwordResetToken.update({
+      where: { id: resetToken.id },
+      data: { usedAt: new Date() },
+    });
+
+    return {
+      success: true,
+      message: 'Password updated successfully.',
+    };
   }
 
   private async ensureStripeCustomer(accountId: number) {
@@ -483,7 +721,9 @@ export class AccountService {
     try {
       customer = await this.stripe.customers.create({
         email: account.email,
-        name: `${account.profile?.prenom || ''} ${account.profile?.nom || ''}`.trim() || undefined,
+        name:
+          `${account.profile?.prenom || ''} ${account.profile?.nom || ''}`.trim() ||
+          undefined,
         metadata: {
           accountId: account.id.toString(),
         },
@@ -524,11 +764,17 @@ export class AccountService {
         },
       });
     } catch (error) {
-      this.rethrowStripeError(error, 'Unable to set Stripe default payment method');
+      this.rethrowStripeError(
+        error,
+        'Unable to set Stripe default payment method',
+      );
     }
   }
 
-  private async ensurePaymentMethodOwnership(accountId: number, paymentMethodId: number) {
+  private async ensurePaymentMethodOwnership(
+    accountId: number,
+    paymentMethodId: number,
+  ) {
     const paymentMethod = await this.prisma.paymentMethod.findFirst({
       where: { id: paymentMethodId, accountId },
     });
@@ -552,7 +798,12 @@ export class AccountService {
 
   private normalizeCardBrand(value: string): string {
     const brand = (value || '').toLowerCase();
-    if (brand === 'visa' || brand === 'mastercard' || brand === 'amex' || brand === 'discover') {
+    if (
+      brand === 'visa' ||
+      brand === 'mastercard' ||
+      brand === 'amex' ||
+      brand === 'discover'
+    ) {
       return brand;
     }
     return 'other';
@@ -561,7 +812,9 @@ export class AccountService {
   private appendQueryParams(url: string, query: Record<string, string>) {
     const serialized = Object.entries(query)
       .map(([key, value]) => {
-        const serializedValue = value.includes('{') ? value : encodeURIComponent(value);
+        const serializedValue = value.includes('{')
+          ? value
+          : encodeURIComponent(value);
         return `${encodeURIComponent(key)}=${serializedValue}`;
       })
       .join('&');
@@ -573,14 +826,20 @@ export class AccountService {
     if (error && typeof error === 'object') {
       const stripeError = error as any;
       if (stripeError.type === 'StripeAuthenticationError') {
-        this.logger.error('Stripe authentication failed. Check STRIPE_SECRET_KEY.');
-        throw new ServiceUnavailableException('Payment provider is temporarily unavailable');
+        this.logger.error(
+          'Stripe authentication failed. Check STRIPE_SECRET_KEY.',
+        );
+        throw new ServiceUnavailableException(
+          'Payment provider is temporarily unavailable',
+        );
       }
       if (stripeError.type === 'StripeInvalidRequestError') {
         throw new BadRequestException(stripeError.message || fallbackMessage);
       }
       if (stripeError.type === 'StripeConnectionError') {
-        throw new ServiceUnavailableException('Payment provider connection failed');
+        throw new ServiceUnavailableException(
+          'Payment provider connection failed',
+        );
       }
     }
 
@@ -589,7 +848,10 @@ export class AccountService {
   }
 
   private normalizeProfileData<
-    T extends { dateNaissance?: string | Date | null; numeroPasseport?: string | null },
+    T extends {
+      dateNaissance?: string | Date | null;
+      numeroPasseport?: string | null;
+    },
   >(data: T): T {
     const normalizedDate =
       data.dateNaissance &&
@@ -608,5 +870,71 @@ export class AccountService {
       dateNaissance: normalizedDate,
       numeroPasseport: normalizedPassport,
     };
+  }
+
+  private mapRole(role?: AccountRole | string | null) {
+    return role === AccountRole.ADMIN || role === 'ADMIN' ? 'admin' : 'client';
+  }
+
+  private sanitizeAccount<
+    T extends {
+      motDePasse: string;
+      role?: AccountRole | string | null;
+      stripeCustomerId?: string | null;
+    },
+  >(account: T) {
+    const {
+      motDePasse,
+      stripeCustomerId: _stripeCustomerId,
+      ...result
+    } = account;
+    return {
+      ...result,
+      role: this.mapRole(result.role),
+    };
+  }
+
+  private hashResetToken(token: string) {
+    return createHash('sha256').update(token).digest('hex');
+  }
+
+  private async sendWelcomeEmail(email: string, userName: string) {
+    try {
+      await this.mailService.sendTemplate({
+        to: email,
+        templateSlug: 'auth.welcome',
+        tokens: {
+          user_name: userName,
+          login_url: `${this.mailService.getAppWebUrl()}/login`,
+        },
+        fallbackSubject: `Welcome to VoyageHub, ${userName}`,
+        fallbackBody: `Your account is ready. Sign in at ${this.mailService.getAppWebUrl()}/login`,
+        actionLabel: 'Sign In',
+        actionUrl: `${this.mailService.getAppWebUrl()}/login`,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Welcome email could not be sent to ${email}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  private async sendPasswordChangedEmail(email: string, userName: string) {
+    try {
+      await this.mailService.sendTemplate({
+        to: email,
+        templateSlug: 'auth.password-changed',
+        tokens: {
+          user_name: userName,
+          changed_at: new Date().toLocaleString('en-US'),
+        },
+        fallbackSubject: 'Your VoyageHub password was changed',
+        fallbackBody: 'Your password was updated successfully.',
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Password changed email could not be sent to ${email}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 }

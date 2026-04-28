@@ -1,4 +1,11 @@
-import { IsString, IsNumber, IsDateString, IsBoolean, IsInt, IsOptional } from 'class-validator';
+import {
+  IsString,
+  IsNumber,
+  IsDateString,
+  IsBoolean,
+  IsInt,
+  IsOptional,
+} from 'class-validator';
 
 export class CreateOffreDto {
   @IsString()
@@ -28,4 +35,3 @@ export class CreateOffreDto {
   @IsInt()
   hotelId: number;
 }
-

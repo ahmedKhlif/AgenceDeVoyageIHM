@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { PrismaModule } from './prisma/prisma.module';
 import { AccountModule } from './modules/account/account.module';
 import { ProfileModule } from './modules/profile/profile.module';
@@ -16,11 +17,19 @@ import { SystemConfigModule } from './modules/system-config/system-config.module
 import { ConditionAnnulationModule } from './modules/condition-annulation/condition-annulation.module';
 import { StatsModule } from './modules/stats/stats.module';
 import { PaymentModule } from './modules/payment/payment.module';
+import { MailModule } from './modules/mail/mail.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000, // 1 minute
+        limit: 10, // 10 requests per minute
+      },
+    ]),
     PrismaModule,
+    MailModule,
     AccountModule,
     ProfileModule,
     AgenceVoyageModule,

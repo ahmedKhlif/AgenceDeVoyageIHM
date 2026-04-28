@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import * as express from 'express';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -23,6 +24,8 @@ async function bootstrap() {
     origin: true, // Allow all origins
     credentials: true,
   });
+
+  app.use(helmet());
 
   const port = process.env.PORT ?? 3001;
   await app.listen(port);
