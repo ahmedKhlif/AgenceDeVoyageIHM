@@ -1,10 +1,14 @@
 import {
+  ArrayNotEmpty,
   IsString,
   IsNumber,
   IsDateString,
   IsBoolean,
   IsInt,
   IsOptional,
+  IsArray,
+  Max,
+  Min,
 } from 'class-validator';
 
 export class CreateOffreDto {
@@ -16,6 +20,8 @@ export class CreateOffreDto {
   description?: string;
 
   @IsNumber()
+  @Min(1)
+  @Max(100)
   tauxRemise: number;
 
   @IsDateString()
@@ -34,4 +40,10 @@ export class CreateOffreDto {
 
   @IsInt()
   hotelId: number;
+
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsInt({ each: true })
+  @IsOptional()
+  chambreIds?: number[];
 }
