@@ -51,6 +51,7 @@ model Account {
   motDePasse      String
   dateInscription DateTime      @default(now())
   actif           Boolean       @default(true)
+  emailVerified   Boolean       @default(false)
   role            AccountRole   @default(CLIENT)
   stripeCustomerId String?      @unique
   profile         Profile?

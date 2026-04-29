@@ -27,6 +27,7 @@ export class AccountService {
   private readonly stripe: any | null;
   private readonly setupSuccessUrl: string;
   private readonly setupCancelUrl: string;
+  private readonly firebaseApiKey: string;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -41,6 +42,8 @@ export class AccountService {
       this.configService.get<string>('STRIPE_SETUP_CANCEL_URL') ||
       'http://localhost:3000/profile?tab=Billing&setup=cancel';
     this.stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
+    this.firebaseApiKey =
+      this.configService.get<string>('FIREBASE_API_KEY') || '';
   }
 
   async create(dto: CreateAccountDto) {
@@ -50,6 +53,7 @@ export class AccountService {
         email: dto.email.trim().toLowerCase(),
         motDePasse: hashedPassword,
         actif: dto.actif ?? true,
+        emailVerified: false,
         role: dto.role ?? AccountRole.CLIENT,
       },
       include: { profile: true },
@@ -134,7 +138,6 @@ export class AccountService {
       if (!accountPasswordValid) {
         throw new UnauthorizedException('Invalid credentials');
       }
-
       return this.sanitizeAccount(account);
     }
 
@@ -197,6 +200,7 @@ export class AccountService {
           email: data.email,
           motDePasse: dummyPassword,
           role: AccountRole.CLIENT,
+          emailVerified: true,
           profile: {
             create: {
               nom: data.lastName || '',
@@ -229,6 +233,7 @@ export class AccountService {
   }
 
   async updateProfile(accountId: number, data: UpdateProfileDto) {
+    await this.ensureAccountIsVerified(accountId);
     const account = await this.prisma.account.findUnique({
       where: { id: accountId },
     });
@@ -262,6 +267,7 @@ export class AccountService {
   }
 
   async listPaymentMethods(accountId: number) {
+    await this.ensureAccountIsVerified(accountId);
     return this.prisma.paymentMethod.findMany({
       where: { accountId },
       orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }],
@@ -269,6 +275,7 @@ export class AccountService {
   }
 
   async getWishlist(accountId: number) {
+    await this.ensureAccountIsVerified(accountId);
     await this.ensureAccountExists(accountId);
 
     const items = await this.prisma.wishlistHotel.findMany({
@@ -286,6 +293,7 @@ export class AccountService {
   }
 
   async addWishlistHotel(accountId: number, hotelId: number) {
+    await this.ensureAccountIsVerified(accountId);
     await this.ensureAccountExists(accountId);
     await this.ensureHotelExists(hotelId);
 
@@ -314,6 +322,7 @@ export class AccountService {
   }
 
   async removeWishlistHotel(accountId: number, hotelId: number) {
+    await this.ensureAccountIsVerified(accountId);
     await this.ensureAccountExists(accountId);
 
     await this.prisma.wishlistHotel.deleteMany({
@@ -337,6 +346,7 @@ export class AccountService {
     accountId: number,
     dto: CreatePaymentMethodDto,
   ) {
+    await this.ensureAccountIsVerified(accountId);
     if (!this.stripe) {
       throw new InternalServerErrorException('Stripe is not configured');
     }
@@ -397,6 +407,7 @@ export class AccountService {
   }
 
   async confirmPaymentMethodSetupSession(accountId: number, sessionId: string) {
+    await this.ensureAccountIsVerified(accountId);
     if (!this.stripe) {
       throw new InternalServerErrorException('Stripe is not configured');
     }
@@ -534,6 +545,7 @@ export class AccountService {
     paymentMethodId: number,
     dto: UpdatePaymentMethodDto,
   ) {
+    await this.ensureAccountIsVerified(accountId);
     const existing = await this.ensurePaymentMethodOwnership(
       accountId,
       paymentMethodId,
@@ -568,6 +580,7 @@ export class AccountService {
   }
 
   async removePaymentMethod(accountId: number, paymentMethodId: number) {
+    await this.ensureAccountIsVerified(accountId);
     const existing = await this.ensurePaymentMethodOwnership(
       accountId,
       paymentMethodId,
@@ -613,6 +626,7 @@ export class AccountService {
     oldPassword: string,
     newPassword: string,
   ) {
+    await this.ensureAccountIsVerified(accountId);
     const account = await this.prisma.account.findUnique({
       where: { id: accountId },
       include: { profile: true },
@@ -810,6 +824,45 @@ export class AccountService {
     };
   }
 
+  async syncEmailVerification(payload: { accountId?: number; idToken: string }) {
+    const accountId =
+      payload.accountId != null
+        ? Number.parseInt(String(payload.accountId), 10)
+        : undefined;
+    const idToken = String(payload.idToken || '').trim();
+    if (!idToken) {
+      throw new BadRequestException('Missing Firebase ID token');
+    }
+
+    const firebaseUser = await this.fetchFirebaseUser(idToken);
+    if (!firebaseUser.emailVerified) {
+      throw new BadRequestException('Email is not verified yet');
+    }
+
+    const account = accountId
+      ? await this.prisma.account.findUnique({
+          where: { id: accountId },
+          select: { id: true, email: true },
+        })
+      : await this.prisma.account.findUnique({
+          where: { email: firebaseUser.email },
+          select: { id: true, email: true },
+        });
+    if (!account) {
+      throw new NotFoundException('Account not found');
+    }
+    if (account.email.toLowerCase() !== firebaseUser.email.toLowerCase()) {
+      throw new UnauthorizedException('Firebase user does not match account');
+    }
+
+    await this.prisma.account.update({
+      where: { id: accountId },
+      data: { emailVerified: true },
+    });
+
+    return { verified: true };
+  }
+
   private async ensureStripeCustomer(accountId: number) {
     const account = await this.prisma.account.findUnique({
       where: { id: accountId },
@@ -905,6 +958,55 @@ export class AccountService {
     if (!account) {
       throw new NotFoundException('Account not found');
     }
+  }
+
+  private async ensureAccountIsVerified(accountId: number) {
+    const account = await this.prisma.account.findUnique({
+      where: { id: accountId },
+      select: { id: true, emailVerified: true, actif: true },
+    });
+
+    if (!account || !account.actif) {
+      throw new NotFoundException('Account not found');
+    }
+    if (!account.emailVerified) {
+      throw new UnauthorizedException(
+        'Please verify your email before accessing your account.',
+      );
+    }
+  }
+
+  private async fetchFirebaseUser(idToken: string): Promise<{
+    email: string;
+    emailVerified: boolean;
+  }> {
+    if (!this.firebaseApiKey) {
+      throw new InternalServerErrorException(
+        'FIREBASE_API_KEY is missing on the backend',
+      );
+    }
+
+    const response = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(this.firebaseApiKey)}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ idToken }),
+      },
+    );
+
+    const payload = (await response.json().catch(() => ({}))) as any;
+    const user = payload?.users?.[0];
+    const email = String(user?.email || '').trim().toLowerCase();
+    const emailVerified = Boolean(user?.emailVerified);
+
+    if (!response.ok || !email) {
+      throw new UnauthorizedException('Invalid Firebase token');
+    }
+
+    return { email, emailVerified };
   }
 
   private async ensureHotelExists(hotelId: number) {

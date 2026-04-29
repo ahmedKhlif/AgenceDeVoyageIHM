@@ -308,6 +308,11 @@ export class ReservationService {
         'Please sign in before confirming this reservation',
       );
     }
+    if (!account.emailVerified) {
+      throw new ForbiddenException(
+        'Please verify your email before accessing your account.',
+      );
+    }
 
     const room = await this.prisma.chambre.findFirst({
       where: {

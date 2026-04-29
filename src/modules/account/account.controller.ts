@@ -176,4 +176,9 @@ export class AuthController {
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.accountService.resetPassword(dto.token, dto.newPassword);
   }
+
+  @Post('sync-verification')
+  syncVerification(@Body() body: { accountId?: number; idToken: string }) {
+    return this.accountService.syncEmailVerification(body);
+  }
 }

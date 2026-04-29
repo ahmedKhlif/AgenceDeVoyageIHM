@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -69,6 +70,7 @@ export class PaymentService {
   }
 
   async createCheckoutSession(dto: CreateCheckoutSessionDto) {
+    await this.ensureVerifiedAccount(dto.userId);
     if (!this.stripe) {
       throw new InternalServerErrorException('Stripe is not configured');
     }
@@ -214,6 +216,7 @@ export class PaymentService {
     userId: number,
     paymentMethodId: number,
   ) {
+    await this.ensureVerifiedAccount(userId);
     if (!this.stripe) {
       throw new InternalServerErrorException('Stripe is not configured');
     }
@@ -356,6 +359,7 @@ export class PaymentService {
   }
 
   async cancelUnpaidBooking(bookingId: number, userId: number) {
+    await this.ensureVerifiedAccount(userId);
     const reservation = await this.prisma.reservation.findUnique({
       where: { id: bookingId },
     });
@@ -389,6 +393,7 @@ export class PaymentService {
   }
 
   async getCheckoutSessionSummary(sessionId: string, userId: number) {
+    await this.ensureVerifiedAccount(userId);
     if (!this.stripe) {
       throw new InternalServerErrorException('Stripe is not configured');
     }
@@ -901,6 +906,22 @@ export class PaymentService {
     } catch (error) {
       this.logger.warn(
         `Failed to send payment failure alert for ${input.bookingReference}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  private async ensureVerifiedAccount(userId: number) {
+    const account = await this.prisma.account.findUnique({
+      where: { id: userId },
+      select: { id: true, actif: true, emailVerified: true },
+    });
+
+    if (!account || !account.actif) {
+      throw new NotFoundException('Account not found');
+    }
+    if (!account.emailVerified) {
+      throw new ForbiddenException(
+        'Please verify your email before accessing your account.',
       );
     }
   }
