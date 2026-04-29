@@ -40,12 +40,13 @@ export class ReservationService {
   ];
 
   private parseDateInput(value: string) {
-    const parsed = new Date(value);
+    // Keep parsing aligned with HotelService to avoid timezone day-shift
+    // between availability checks and booking creation.
+    const parsed = new Date(`${value}T00:00:00`);
     if (Number.isNaN(parsed.getTime())) {
       throw new BadRequestException(`Invalid date: ${value}`);
     }
 
-    parsed.setHours(0, 0, 0, 0);
     return parsed;
   }
 
@@ -62,6 +63,7 @@ export class ReservationService {
 
   private evaluateCancellationPolicy(input: {
     status: StatutReservation;
+    paymentStatus?: string | null;
     checkInDate: Date;
     totalPaid: number;
     roomPricePerNight: number;
@@ -73,7 +75,15 @@ export class ReservationService {
       description?: string | null;
     } | null;
   }): CancellationEvaluation {
-    const { status, checkInDate, totalPaid, roomPricePerNight, now, policy } =
+    const {
+      status,
+      paymentStatus,
+      checkInDate,
+      totalPaid,
+      roomPricePerNight,
+      now,
+      policy,
+    } =
       input;
     const nowMs = now.getTime();
     const checkInMs = checkInDate.getTime();
@@ -82,6 +92,12 @@ export class ReservationService {
       status === StatutReservation.ANNULEE ||
       status === StatutReservation.REFUSEE;
     const isClosedReservation = status === StatutReservation.TERMINEE;
+    const isBlockedReservation = status === StatutReservation.BLOQUEE;
+    const isConfirmedReservation = status === StatutReservation.CONFIRMEE;
+    const normalizedPaymentStatus = (paymentStatus || '').toUpperCase();
+    const isAlreadyPaid =
+      normalizedPaymentStatus === 'PAID' ||
+      normalizedPaymentStatus === 'PAID_CONFLICT';
 
     if (isAlreadyCancelled) {
       return {
@@ -110,6 +126,36 @@ export class ReservationService {
         chargeAmount: totalPaid,
         totalPaid,
         reason: 'Cancellation deadline has passed',
+      };
+    }
+
+    if (isBlockedReservation) {
+      return {
+        allowed: false,
+        policyLabel: 'Booking is blocked',
+        policyDescription:
+          'This reservation is blocked and cannot be cancelled online.',
+        freeCancellationUntil: null,
+        refundType: 'NONE',
+        refundAmount: 0,
+        chargeAmount: totalPaid,
+        totalPaid,
+        reason: 'Blocked reservations cannot be cancelled',
+      };
+    }
+
+    if (isConfirmedReservation || isAlreadyPaid) {
+      return {
+        allowed: false,
+        policyLabel: 'Booking already paid or confirmed',
+        policyDescription:
+          'This reservation is already paid/confirmed and cannot be cancelled.',
+        freeCancellationUntil: null,
+        refundType: 'NONE',
+        refundAmount: 0,
+        chargeAmount: totalPaid,
+        totalPaid,
+        reason: 'Paid or confirmed reservations cannot be cancelled',
       };
     }
 
@@ -383,6 +429,7 @@ export class ReservationService {
     const now = new Date();
     const evaluation = this.evaluateCancellationPolicy({
       status: reservation.statut,
+      paymentStatus: reservation.paymentStatus,
       checkInDate: reservation.dateArrivee,
       totalPaid: reservation.montantTotal,
       roomPricePerNight: reservation.chambre.prixParNuit,
@@ -427,6 +474,7 @@ export class ReservationService {
     const now = new Date();
     const evaluation = this.evaluateCancellationPolicy({
       status: reservation.statut,
+      paymentStatus: reservation.paymentStatus,
       checkInDate: reservation.dateArrivee,
       totalPaid: reservation.montantTotal,
       roomPricePerNight: reservation.chambre.prixParNuit,

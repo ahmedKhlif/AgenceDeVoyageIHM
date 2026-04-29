@@ -209,6 +209,152 @@ export class PaymentService {
     };
   }
 
+  async payWithSavedCard(
+    bookingId: number,
+    userId: number,
+    paymentMethodId: number,
+  ) {
+    if (!this.stripe) {
+      throw new InternalServerErrorException('Stripe is not configured');
+    }
+
+    const reservation = await this.prisma.reservation.findUnique({
+      where: { id: bookingId },
+      include: {
+        account: true,
+        chambre: {
+          include: {
+            hotel: true,
+            typeChambre: true,
+          },
+        },
+      },
+    });
+
+    if (!reservation) {
+      throw new BadRequestException('Booking not found');
+    }
+
+    if (reservation.accountId !== userId) {
+      throw new BadRequestException(
+        'Booking does not belong to the provided user',
+      );
+    }
+
+    if (
+      reservation.statut === StatutReservation.ANNULEE ||
+      reservation.statut === StatutReservation.REFUSEE ||
+      reservation.statut === StatutReservation.BLOQUEE ||
+      reservation.statut === StatutReservation.TERMINEE ||
+      reservation.statut === StatutReservation.CONFIRMEE
+    ) {
+      throw new BadRequestException(
+        'This booking cannot be paid in its current status',
+      );
+    }
+
+    const paymentMethod = await this.prisma.paymentMethod.findFirst({
+      where: {
+        id: paymentMethodId,
+        accountId: userId,
+      },
+    });
+
+    if (!paymentMethod?.stripePaymentMethodId) {
+      throw new BadRequestException('Saved payment method not found');
+    }
+
+    if (!reservation.account.stripeCustomerId) {
+      throw new BadRequestException(
+        'No Stripe customer is associated with this account',
+      );
+    }
+
+    let paymentIntent: any;
+    try {
+      paymentIntent = await this.stripe.paymentIntents.create({
+        amount: Math.round(reservation.montantTotal * 100),
+        currency: this.currency,
+        customer: reservation.account.stripeCustomerId,
+        payment_method: paymentMethod.stripePaymentMethodId,
+        confirm: true,
+        off_session: true,
+        metadata: {
+          bookingId: reservation.id.toString(),
+          userId: reservation.accountId.toString(),
+          tripId: reservation.chambre.hotelId.toString(),
+        },
+      });
+    } catch (error: any) {
+      const failureMessage =
+        error?.raw?.message || error?.message || 'Payment failed';
+      await this.sendPaymentFailureAlert({
+        bookingReference: reservation.codeConfirmation,
+        hotelName: reservation.chambre.hotel.nom,
+        userName: `Account #${reservation.accountId}`,
+        failureReason: failureMessage,
+      });
+      throw new BadRequestException(failureMessage);
+    }
+
+    if (paymentIntent?.status !== 'succeeded') {
+      throw new BadRequestException('Payment could not be completed');
+    }
+
+    const syntheticSessionId = `saved_card_${paymentIntent.id}`;
+    const finalized = await this.finalizeReservationPayment(
+      reservation.id,
+      syntheticSessionId,
+      paymentIntent.id,
+    );
+
+    if (!finalized.reservation || finalized.reservation.statut !== StatutReservation.CONFIRMEE) {
+      throw new BadRequestException(
+        'Payment was received but this reservation is not in a confirmed state',
+      );
+    }
+
+    if (finalized.changed) {
+      await this.notificationService.notifyReservationStatusUpdate({
+        accountId: finalized.reservation.accountId,
+        bookingReference: finalized.reservation.codeConfirmation,
+        hotelName: finalized.reservation.chambre.hotel.nom,
+        status: finalized.reservation.statut,
+        checkInDate: finalized.reservation.dateArrivee,
+      });
+
+      const roomSubtotal = Number(
+        (
+          finalized.reservation.chambre.prixParNuit *
+          finalized.reservation.nombreNuits
+        ).toFixed(2),
+      );
+      const taxes = Number(
+        Math.max(0, finalized.reservation.montantTotal - roomSubtotal).toFixed(
+          2,
+        ),
+      );
+
+      await this.notificationService.sendPaymentReceipt({
+        accountId: finalized.reservation.accountId,
+        bookingReference: finalized.reservation.codeConfirmation,
+        hotelName: finalized.reservation.chambre.hotel.nom,
+        checkInDate: finalized.reservation.dateArrivee,
+        checkOutDate: finalized.reservation.dateDepart,
+        roomSubtotal,
+        taxes,
+        totalAmount: finalized.reservation.montantTotal,
+      });
+    }
+
+    return {
+      paid: true,
+      bookingId: finalized.reservation.id,
+      bookingReference: finalized.reservation.codeConfirmation,
+      status: finalized.reservation.statut,
+    };
+  }
+
   async cancelUnpaidBooking(bookingId: number, userId: number) {
     const reservation = await this.prisma.reservation.findUnique({
       where: { id: bookingId },

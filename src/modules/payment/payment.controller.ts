@@ -14,6 +14,7 @@ import type { Request } from 'express';
 import { CheckoutSessionSummaryDto } from './dto/checkout-session-summary.dto';
 import { CancelUnpaidBookingDto } from './dto/cancel-unpaid-booking.dto';
 import { CreateCheckoutSessionDto } from './dto/create-checkout-session.dto';
+import { PayWithSavedCardDto } from './dto/pay-with-saved-card.dto';
 import { PaymentService } from './payment.service';
 
 @Controller('payments')
@@ -39,6 +40,15 @@ export class PaymentController {
   @Post('cancel-unpaid-booking')
   cancelUnpaidBooking(@Body() dto: CancelUnpaidBookingDto) {
     return this.paymentService.cancelUnpaidBooking(dto.bookingId, dto.userId);
+  }
+
+  @Post('pay-with-saved-card')
+  payWithSavedCard(@Body() dto: PayWithSavedCardDto) {
+    return this.paymentService.payWithSavedCard(
+      dto.bookingId,
+      dto.userId,
+      dto.paymentMethodId,
+    );
   }
 
   @Post('webhook')
