@@ -32,9 +32,21 @@ export class HotelService {
   ];
 
   private parseDateInput(value: string) {
-    const parsed = new Date(`${value}T00:00:00`);
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+    if (!match) {
+      throw new BadRequestException('Invalid date format');
+    }
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const parsed = new Date(Date.UTC(year, month - 1, day));
 
-    if (Number.isNaN(parsed.getTime())) {
+    if (
+      Number.isNaN(parsed.getTime()) ||
+      parsed.getUTCFullYear() !== year ||
+      parsed.getUTCMonth() !== month - 1 ||
+      parsed.getUTCDate() !== day
+    ) {
       throw new BadRequestException('Invalid date format');
     }
 
