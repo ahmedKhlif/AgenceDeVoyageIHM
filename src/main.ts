@@ -28,7 +28,7 @@ async function bootstrap() {
   app.use(helmet());
 
   const port = process.env.PORT ?? 3001;
-  await app.listen(port);
-  console.log(`Application running on http://localhost:${port}/api`);
+   await app.listen(port);
+   console.log(`Application running on port ${port}`);
 }
 bootstrap();
