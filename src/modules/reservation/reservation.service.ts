@@ -40,10 +40,19 @@ export class ReservationService {
   ];
 
   private parseDateInput(value: string) {
-    // Keep parsing aligned with HotelService to avoid timezone day-shift
-    // between availability checks and booking creation.
-    const parsed = new Date(`${value}T00:00:00`);
-    if (Number.isNaN(parsed.getTime())) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+    if (!match) {
+      throw new BadRequestException(`Invalid date: ${value}`);
+    }
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const parsed = new Date(Date.UTC(year, month - 1, day));
+    if (
+      parsed.getUTCFullYear() !== year ||
+      parsed.getUTCMonth() !== month - 1 ||
+      parsed.getUTCDate() !== day
+    ) {
       throw new BadRequestException(`Invalid date: ${value}`);
     }
 
