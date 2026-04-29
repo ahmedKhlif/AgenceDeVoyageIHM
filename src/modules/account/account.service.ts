@@ -58,11 +58,6 @@ export class AccountService {
       },
       include: { profile: true },
     });
-
-    await this.sendWelcomeEmail(
-      created.email,
-      created.profile?.prenom || 'Traveler',
-    );
     return this.sanitizeAccount(created);
   }
 
@@ -842,11 +837,29 @@ export class AccountService {
     const account = accountId
       ? await this.prisma.account.findUnique({
           where: { id: accountId },
-          select: { id: true, email: true },
+          select: {
+            id: true,
+            email: true,
+            emailVerified: true,
+            profile: {
+              select: {
+                prenom: true,
+              },
+            },
+          },
         })
       : await this.prisma.account.findUnique({
           where: { email: firebaseUser.email },
-          select: { id: true, email: true },
+          select: {
+            id: true,
+            email: true,
+            emailVerified: true,
+            profile: {
+              select: {
+                prenom: true,
+              },
+            },
+          },
         });
     if (!account) {
       throw new NotFoundException('Account not found');
@@ -856,9 +869,16 @@ export class AccountService {
     }
 
     await this.prisma.account.update({
-      where: { id: accountId },
+      where: { id: account.id },
       data: { emailVerified: true },
     });
+
+    if (!account.emailVerified) {
+      await this.sendWelcomeEmail(
+        account.email,
+        account.profile?.prenom || 'Traveler',
+      );
+    }
 
     return { verified: true };
   }
