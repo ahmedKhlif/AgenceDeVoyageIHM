@@ -20,8 +20,9 @@ async function bootstrap() {
   );
 
   app.setGlobalPrefix('api');
+  const corsOrigins = process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : ['https://agence-bay.vercel.app', 'http://localhost:3000'];
   app.enableCors({
-    origin: ['https://agence-bay.vercel.app', 'http://localhost:3000'], // Allow Vercel and local dev
+    origin: corsOrigins,
     credentials: true,
   });
 
