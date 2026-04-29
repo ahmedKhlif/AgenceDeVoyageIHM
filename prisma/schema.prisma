@@ -38,6 +38,11 @@ enum AccountRole {
   ADMIN
 }
 
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+}
+
 enum MailTemplateChannel {
   EMAIL
   SMS
@@ -52,6 +57,7 @@ model Account {
   dateInscription DateTime      @default(now())
   actif           Boolean       @default(true)
   emailVerified   Boolean       @default(false)
+  authProvider    AuthProvider  @default(LOCAL)
   role            AccountRole   @default(CLIENT)
   stripeCustomerId String?      @unique
   profile         Profile?

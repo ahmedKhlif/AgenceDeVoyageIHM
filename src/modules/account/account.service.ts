@@ -9,7 +9,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AccountRole } from '@prisma/client';
+import { AccountRole, AuthProvider } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
@@ -54,6 +54,7 @@ export class AccountService {
         motDePasse: hashedPassword,
         actif: dto.actif ?? true,
         emailVerified: false,
+        authProvider: AuthProvider.LOCAL,
         role: dto.role ?? AccountRole.CLIENT,
       },
       include: { profile: true },
@@ -196,6 +197,7 @@ export class AccountService {
           motDePasse: dummyPassword,
           role: AccountRole.CLIENT,
           emailVerified: true,
+          authProvider: AuthProvider.GOOGLE,
           profile: {
             create: {
               nom: data.lastName || '',
@@ -630,6 +632,11 @@ export class AccountService {
     if (!account) {
       throw new NotFoundException('Account not found');
     }
+    if (account.authProvider === AuthProvider.GOOGLE) {
+      throw new BadRequestException(
+        'This account uses Google sign-in. Password updates are not available.',
+      );
+    }
 
     const currentStoredPassword = account.motDePasse || '';
     const isBcryptHash =
@@ -686,6 +693,7 @@ export class AccountService {
         id: true,
         email: true,
         actif: true,
+        authProvider: true,
         profile: {
           select: {
             prenom: true,
@@ -703,6 +711,11 @@ export class AccountService {
         message:
           'If an account exists for this email, a reset link has been sent.',
       };
+    }
+    if (account?.authProvider === AuthProvider.GOOGLE) {
+      throw new BadRequestException(
+        'This account uses Google sign-in. Password reset is not available.',
+      );
     }
 
     await this.prisma.passwordResetToken.updateMany({
