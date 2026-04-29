@@ -20,7 +20,7 @@ async function bootstrap() {
   );
 
   app.setGlobalPrefix('api');
-  const corsOrigins = process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : ['https://agence-bay.vercel.app', 'http://localhost:3000'];
+  const corsOrigins = process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : [process.env.APP_WEB_URL || 'https://agence-bay.vercel.app', 'http://localhost:3000'];
   app.enableCors({
     origin: corsOrigins,
     credentials: true,
