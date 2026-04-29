@@ -149,6 +149,52 @@ function Ensure-HotelRoomsAndImages {
     }
 }
 
+function Ensure-ActiveOffers {
+    param([System.Array]$Hotels)
+
+    $today = Get-Date
+    $startDate = $today.AddDays(-3).ToString("o")
+    $endDate = $today.AddDays(45).ToString("o")
+    $discounts = @(8, 10, 12, 15, 18, 20, 22, 25)
+
+    foreach ($hotel in $Hotels) {
+        $existingOffers = Get-Collection -Uri "$baseUrl/offres?active=true&hotelId=$($hotel.id)"
+        $hasCurrent = $false
+
+        foreach ($offer in $existingOffers) {
+            $offerStart = Get-Date $offer.dateDebut
+            $offerEnd = Get-Date $offer.dateFin
+            if ($offerStart -le $today -and $offerEnd -ge $today) {
+                $hasCurrent = $true
+                break
+            }
+        }
+
+        if ($hasCurrent) {
+            continue
+        }
+
+        $discount = $discounts[$hotel.id % $discounts.Count]
+        $offerPayload = @{
+            titre       = "Special Offer $($hotel.ville)"
+            description = "Limited-time deal for $($hotel.nom) in $($hotel.ville)."
+            tauxRemise  = $discount
+            dateDebut   = $startDate
+            dateFin     = $endDate
+            active      = $true
+            hotelId     = $hotel.id
+        }
+
+        try {
+            Invoke-JsonRequest -Method POST -Uri "$baseUrl/offres" -Body $offerPayload | Out-Null
+            Write-Host "  Offer created for $($hotel.nom) ($discount% off)"
+        }
+        catch {
+            Write-Host "  Warning: could not create offer for '$($hotel.nom)': $($_.Exception.Message)"
+        }
+    }
+}
+
 # ─── STEP 1 : Ensure at least 1 agency exists ────────────────────────────────
 try {
     Write-Host "Checking agencies..."
@@ -281,9 +327,15 @@ foreach ($hotel in $allHotels) {
     Ensure-HotelRoomsAndImages -Hotel $hotel -TypeIds $typeIds
 }
 
-# ─── STEP 5 : Summary ─────────────────────────────────────────────────────────
+# ─── STEP 5 : Ensure active offers ────────────────────────────────────────────
+Write-Host ""
+Write-Host "Ensuring active offers for all hotels..."
+Ensure-ActiveOffers -Hotels $allHotels
+
+# ─── STEP 6 : Summary ─────────────────────────────────────────────────────────
 $finalHotels      = Get-Collection -Uri "$baseUrl/hotels"
 $finalRooms       = Get-Collection -Uri "$baseUrl/chambres"
+$finalActiveOffers = Get-Collection -Uri "$baseUrl/offres/active"
 $roomsWithPhotos  = @($finalRooms | Where-Object { @($_.photos).Count -gt 0 }).Count
 
 Write-Host ""
@@ -291,3 +343,4 @@ Write-Host "Done."
 Write-Host "Hotels  in database : $($finalHotels.Count)"
 Write-Host "Rooms   in database : $($finalRooms.Count)"
 Write-Host "Rooms with photos   : $roomsWithPhotos"
+Write-Host "Active offers       : $($finalActiveOffers.Count)"

@@ -18,6 +18,7 @@ import { ConditionAnnulationModule } from './modules/condition-annulation/condit
 import { StatsModule } from './modules/stats/stats.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { MailModule } from './modules/mail/mail.module';
+import { AssistantModule } from './modules/assistant/assistant.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { MailModule } from './modules/mail/mail.module';
     ConditionAnnulationModule,
     StatsModule,
     PaymentModule,
+    AssistantModule,
   ],
 })
 export class AppModule {}
