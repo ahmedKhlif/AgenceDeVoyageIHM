@@ -241,7 +241,7 @@ export class MailService implements OnModuleInit {
   }
 
   getAppWebUrl() {
-    return this.config.get<string>('APP_WEB_URL') || 'http://localhost:3000';
+    return this.config.get<string>('APP_WEB_URL') || 'https://agence-bay.vercel.app';
   }
 
   async ensureDefaultTemplates() {
