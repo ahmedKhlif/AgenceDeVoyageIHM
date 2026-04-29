@@ -1,4 +1,4 @@
-$baseUrl = "http://localhost:3001/api"
+$baseUrl = "https://agencedevoyageihm-production.up.railway.app/api"
 $headers = @{ "Content-Type" = "application/json" }
 
 function Invoke-JsonRequest {

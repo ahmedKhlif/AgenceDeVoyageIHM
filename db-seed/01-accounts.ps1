@@ -20,33 +20,6 @@ if ($agencies.Count -eq 0) {
     Write-Host "  . Admin Agency already exists: $($agency.email)"
 }
 
-# Verify the admin agency account in the database
-Write-Host "  . Verifying admin account via Prisma SQL..."
-$dbUrl = ""
-$envFile = Join-Path $PSScriptRoot "..\.env"
-if (Test-Path $envFile) {
-    $envContent = Get-Content $envFile
-    foreach ($line in $envContent) {
-        if ($line -match "^DATABASE_URL=(.*)") {
-            $dbUrl = $matches[1].Trim('"').Trim("'")
-        }
-    }
-}
-
-if ($dbUrl -ne "") {
-    $verifyScript = @"
-const { Client } = require('pg');
-async function verify() {
-const client = new Client({ connectionString: '$dbUrl' });
-await client.connect();
-await client.query('UPDATE accounts SET "emailVerified" = true');
-await client.end();
-}
-verify().then(() => process.exit(0)).catch((e) => { console.error(e); process.exit(1); });
-"@
-    $verifyScript | Out-File -FilePath "$PSScriptRoot\verify.js" -Encoding utf8
-    node "$PSScriptRoot\verify.js"
-    Remove-Item "$PSScriptRoot\verify.js"
-}
+# Verify disabled - API handles verification
 
 # User creation disabled as requested

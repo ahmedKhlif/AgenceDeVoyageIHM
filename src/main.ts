@@ -21,7 +21,7 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api');
   app.enableCors({
-    origin: true, // Allow all origins
+    origin: ['https://agence-bay.vercel.app', 'http://localhost:3000'], // Allow Vercel and local dev
     credentials: true,
   });
 
