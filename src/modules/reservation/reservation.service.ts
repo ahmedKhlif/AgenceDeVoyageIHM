@@ -307,9 +307,7 @@ export class ReservationService {
         nombreNuits: nights,
         montantTotal: total,
         codeConfirmation: bookingReference,
-        statut: payAtHotel
-          ? StatutReservation.CONFIRMEE
-          : StatutReservation.EN_ATTENTE,
+        statut: StatutReservation.EN_ATTENTE,
         paymentStatus: payAtHotel ? 'PAY_AT_HOTEL' : 'PENDING',
       },
       include: {

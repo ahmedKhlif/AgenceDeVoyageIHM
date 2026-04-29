@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { CheckoutSessionSummaryDto } from './dto/checkout-session-summary.dto';
+import { CancelUnpaidBookingDto } from './dto/cancel-unpaid-booking.dto';
 import { CreateCheckoutSessionDto } from './dto/create-checkout-session.dto';
 import { PaymentService } from './payment.service';
 
@@ -33,6 +34,11 @@ export class PaymentController {
       sessionId,
       query.userId,
     );
+  }
+
+  @Post('cancel-unpaid-booking')
+  cancelUnpaidBooking(@Body() dto: CancelUnpaidBookingDto) {
+    return this.paymentService.cancelUnpaidBooking(dto.bookingId, dto.userId);
   }
 
   @Post('webhook')

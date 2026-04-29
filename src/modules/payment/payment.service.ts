@@ -195,10 +195,51 @@ export class PaymentService {
       throw new InternalServerErrorException('Stripe checkout URL is missing');
     }
 
+    await this.prisma.reservation.update({
+      where: { id: reservation.id },
+      data: {
+        stripeSessionId: session.id,
+        paymentStatus: 'CHECKOUT_PENDING',
+      },
+    });
+
     return {
       sessionId: session.id,
       url: session.url,
     };
+  }
+
+  async cancelUnpaidBooking(bookingId: number, userId: number) {
+    const reservation = await this.prisma.reservation.findUnique({
+      where: { id: bookingId },
+    });
+
+    if (!reservation) {
+      return { removed: false };
+    }
+
+    if (reservation.accountId !== userId) {
+      throw new BadRequestException(
+        'Booking does not belong to the provided user',
+      );
+    }
+
+    if (reservation.statut !== StatutReservation.EN_ATTENTE) {
+      return { removed: false };
+    }
+
+    if (
+      reservation.paymentStatus === 'PAY_AT_HOTEL' ||
+      reservation.paymentStatus === 'PAID'
+    ) {
+      return { removed: false };
+    }
+
+    await this.prisma.reservation.delete({
+      where: { id: reservation.id },
+    });
+
+    return { removed: true };
   }
 
   async getCheckoutSessionSummary(sessionId: string, userId: number) {
@@ -424,6 +465,8 @@ export class PaymentService {
       failureReason:
         session.payment_status || 'Checkout session payment failed',
     });
+
+    await this.cleanupFailedPaymentReservation(bookingId, session.id);
   }
 
   private async handlePaymentIntentFailed(paymentIntent: any) {
@@ -448,6 +491,46 @@ export class PaymentService {
         paymentIntent?.last_payment_error?.message ||
         paymentIntent?.status ||
         'Payment intent failed',
+    });
+
+    await this.cleanupFailedPaymentReservation(bookingId, null);
+  }
+
+  private async cleanupFailedPaymentReservation(
+    bookingId: number,
+    sessionId: string | null,
+  ) {
+    const reservation = await this.prisma.reservation.findUnique({
+      where: { id: bookingId },
+      select: {
+        id: true,
+        statut: true,
+        paymentStatus: true,
+        stripeSessionId: true,
+      },
+    });
+
+    if (!reservation) {
+      return;
+    }
+
+    if (reservation.statut !== StatutReservation.EN_ATTENTE) {
+      return;
+    }
+
+    if (
+      reservation.paymentStatus === 'PAY_AT_HOTEL' ||
+      reservation.paymentStatus === 'PAID'
+    ) {
+      return;
+    }
+
+    if (sessionId && reservation.stripeSessionId !== sessionId) {
+      return;
+    }
+
+    await this.prisma.reservation.delete({
+      where: { id: reservation.id },
     });
   }
 
