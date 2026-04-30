@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MailTemplateChannel } from '@prisma/client';
 import * as nodemailer from 'nodemailer';
+import SMTPTransport from 'nodemailer/lib/smtp-transport';
 import { PrismaService } from '../../prisma/prisma.service';
 import { defaultMailTemplates } from './mail.defaults';
 import { SendTestEmailDto } from './dto/send-test-email.dto';
@@ -31,7 +32,7 @@ type SendTemplateOptions = {
 @Injectable()
 export class MailService implements OnModuleInit {
   private readonly logger = new Logger(MailService.name);
-  private readonly transporter: nodemailer.Transporter;
+  private readonly transporter: nodemailer.Transporter<SMTPTransport.SentMessageInfo>;
   private readonly host: string;
   private readonly port: number;
   private readonly secure: boolean;
@@ -64,7 +65,7 @@ export class MailService implements OnModuleInit {
       ...(this.user && this.pass
         ? { auth: { user: this.user, pass: this.pass } }
         : {}),
-    });
+    } as SMTPTransport.Options);
   }
 
   async onModuleInit() {
