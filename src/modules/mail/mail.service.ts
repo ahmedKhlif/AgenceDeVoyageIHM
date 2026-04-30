@@ -60,6 +60,7 @@ export class MailService implements OnModuleInit {
       connectionTimeout: 5000,
       greetingTimeout: 5000,
       socketTimeout: 5000,
+      family: 4, // Force IPv4
       ...(this.user && this.pass
         ? { auth: { user: this.user, pass: this.pass } }
         : {}),
