@@ -58,6 +58,11 @@ export class HotelService {
     return Math.max(1, Math.round(diffInMs / (1000 * 60 * 60 * 24)));
   }
 
+  private minRoomPrice(hotel: { chambres: Array<{ prixParNuit: number }> }) {
+    if (!hotel.chambres?.length) return Number.POSITIVE_INFINITY;
+    return Math.min(...hotel.chambres.map((room) => room.prixParNuit));
+  }
+
   async create(dto: CreateHotelDto) {
     const agency = await this.prisma.agenceVoyage.findUnique({
       where: { id: dto.agenceVoyageId },
@@ -151,31 +156,60 @@ export class HotelService {
       };
     }
 
+    const sortBy = options?.sortBy;
     const orderBy: any =
-      options?.sortBy === 'note' ? { etoiles: 'desc' } : { id: 'desc' };
+      sortBy === 'note' ||
+      sortBy === 'price_asc' ||
+      sortBy === 'price_desc'
+        ? { etoiles: 'desc' }
+        : { id: 'desc' };
 
     if (!hasPagination) {
-      return this.prisma.hotel.findMany({
+      const items = await this.prisma.hotel.findMany({
         where,
         include: { chambres: true, offres: true },
         orderBy,
       });
+
+      if (sortBy === 'price_asc') {
+        return [...items].sort(
+          (a, b) => this.minRoomPrice(a) - this.minRoomPrice(b),
+        );
+      }
+      if (sortBy === 'price_desc') {
+        return [...items].sort(
+          (a, b) => this.minRoomPrice(b) - this.minRoomPrice(a),
+        );
+      }
+
+      return items;
     }
 
     const page = options!.page!;
     const limit = options!.limit!;
     const skip = (page - 1) * limit;
 
-    const [items, total] = await Promise.all([
+    const [allItems, total] = await Promise.all([
       this.prisma.hotel.findMany({
         where,
         include: { chambres: true, offres: true },
         orderBy,
-        skip,
-        take: limit,
       }),
       this.prisma.hotel.count({ where }),
     ]);
+
+    let sortedItems = allItems;
+    if (sortBy === 'price_asc') {
+      sortedItems = [...allItems].sort(
+        (a, b) => this.minRoomPrice(a) - this.minRoomPrice(b),
+      );
+    } else if (sortBy === 'price_desc') {
+      sortedItems = [...allItems].sort(
+        (a, b) => this.minRoomPrice(b) - this.minRoomPrice(a),
+      );
+    }
+
+    const items = sortedItems.slice(skip, skip + limit);
 
     const totalPages = Math.max(1, Math.ceil(total / limit));
 
@@ -379,6 +413,14 @@ export class HotelService {
 
     if (filters.sortBy === 'note') {
       availableHotels.sort((a, b) => b.etoiles - a.etoiles);
+    } else if (filters.sortBy === 'price_asc') {
+      availableHotels.sort(
+        (a, b) => this.minRoomPrice(a) - this.minRoomPrice(b),
+      );
+    } else if (filters.sortBy === 'price_desc') {
+      availableHotels.sort(
+        (a, b) => this.minRoomPrice(b) - this.minRoomPrice(a),
+      );
     } else {
       availableHotels.sort((a, b) => b.id - a.id);
     }
