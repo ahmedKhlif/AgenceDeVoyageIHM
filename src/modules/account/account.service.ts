@@ -996,13 +996,13 @@ export class AccountService {
   private async ensureAccountIsVerified(accountId: number) {
     const account = await this.prisma.account.findUnique({
       where: { id: accountId },
-      select: { id: true, emailVerified: true, actif: true },
+      select: { id: true, emailVerified: true, actif: true, role: true },
     });
 
     if (!account || !account.actif) {
       throw new NotFoundException('Account not found');
     }
-    if (!account.emailVerified) {
+    if (account.role !== AccountRole.ADMIN && !account.emailVerified) {
       throw new UnauthorizedException(
         'Please verify your email before accessing your account.',
       );
