@@ -58,10 +58,10 @@ export class PaymentService {
       this.configService.get<string>('STRIPE_WEBHOOK_SECRET') || '';
     this.successUrl =
       this.configService.get<string>('STRIPE_SUCCESS_URL') ||
-      'http://localhost:3000/payment/success';
+      'https://agence-bay.vercel.app/payment/success';
     this.cancelUrl =
       this.configService.get<string>('STRIPE_CANCEL_URL') ||
-      'http://localhost:3000/payment/cancel';
+      'https://agence-bay.vercel.app/payment/cancel';
     this.currency = (
       this.configService.get<string>('STRIPE_CURRENCY') || 'usd'
     ).toLowerCase();

@@ -37,10 +37,10 @@ export class AccountService {
     const stripeSecretKey = this.configService.get<string>('STRIPE_SECRET_KEY');
     this.setupSuccessUrl =
       this.configService.get<string>('STRIPE_SETUP_SUCCESS_URL') ||
-      'http://localhost:3000/profile?tab=Billing&setup=success';
+      'https://agence-bay.vercel.app/profile?tab=Billing&setup=success';
     this.setupCancelUrl =
       this.configService.get<string>('STRIPE_SETUP_CANCEL_URL') ||
-      'http://localhost:3000/profile?tab=Billing&setup=cancel';
+      'https://agence-bay.vercel.app/profile?tab=Billing&setup=cancel';
     this.stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
     this.firebaseApiKey =
       this.configService.get<string>('FIREBASE_API_KEY') || '';

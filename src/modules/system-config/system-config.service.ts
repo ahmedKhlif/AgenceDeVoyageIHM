@@ -56,7 +56,7 @@ const defaultSystemConfigs: CreateSystemConfigDto[] = [
   },
   {
     cle: 'app_web_url',
-    valeur: 'http://localhost:3000',
+    valeur: 'https://agence-bay.vercel.app',
     description: 'Public web URL used in email links.',
   },
 ];

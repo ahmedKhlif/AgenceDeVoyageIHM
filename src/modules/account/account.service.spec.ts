@@ -30,7 +30,7 @@ describe('AccountService', () => {
     };
 
     mailService = {
-      getAppWebUrl: jest.fn(() => 'http://localhost:3000'),
+      getAppWebUrl: jest.fn(() => 'https://agence-bay.vercel.app'),
       sendTemplate: jest.fn().mockResolvedValue(undefined),
     };
 

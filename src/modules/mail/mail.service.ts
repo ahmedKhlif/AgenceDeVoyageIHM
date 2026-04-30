@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MailTemplateChannel } from '@prisma/client';
 import * as nodemailer from 'nodemailer';
+import SMTPTransport from 'nodemailer/lib/smtp-transport';
 import { PrismaService } from '../../prisma/prisma.service';
 import { defaultMailTemplates } from './mail.defaults';
 import { SendTestEmailDto } from './dto/send-test-email.dto';
@@ -31,7 +32,7 @@ type SendTemplateOptions = {
 @Injectable()
 export class MailService implements OnModuleInit {
   private readonly logger = new Logger(MailService.name);
-  private readonly transporter: nodemailer.Transporter;
+  private readonly transporter: nodemailer.Transporter<SMTPTransport.SentMessageInfo>;
   private readonly host: string;
   private readonly port: number;
   private readonly secure: boolean;
@@ -60,10 +61,13 @@ export class MailService implements OnModuleInit {
       connectionTimeout: 5000,
       greetingTimeout: 5000,
       socketTimeout: 5000,
+      tls: {
+        family: 4, // Force IPv4
+      },
       ...(this.user && this.pass
         ? { auth: { user: this.user, pass: this.pass } }
         : {}),
-    });
+    } as SMTPTransport.Options);
   }
 
   async onModuleInit() {
@@ -241,7 +245,7 @@ export class MailService implements OnModuleInit {
   }
 
   getAppWebUrl() {
-    return this.config.get<string>('APP_WEB_URL') || 'http://localhost:3000';
+    return this.config.get<string>('APP_WEB_URL') || 'https://agence-bay.vercel.app';
   }
 
   async ensureDefaultTemplates() {

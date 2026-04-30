@@ -21,14 +21,14 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api');
   app.enableCors({
-    origin: true, // Allow all origins
+    origin: process.env.APP_WEB_URL || 'https://agence-bay.vercel.app',
     credentials: true,
   });
 
   app.use(helmet());
 
   const port = process.env.PORT ?? 3001;
-  await app.listen(port);
-  console.log(`Application running on http://localhost:${port}/api`);
+   await app.listen(port);
+   console.log(`Application running on port ${port}`);
 }
 bootstrap();
