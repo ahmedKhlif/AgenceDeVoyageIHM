@@ -227,6 +227,7 @@ export class OffreService {
         hotelId: true,
         dateDebut: true,
         dateFin: true,
+        active: true,
       },
     });
 
@@ -254,7 +255,7 @@ export class OffreService {
       dto.dateFin !== undefined
         ? this.parseOfferDate(dto.dateFin, 'dateFin')
         : current.dateFin;
-    const targetIsActive = dto.active ?? true;
+    const targetIsActive = dto.active ?? current.active;
 
     if (targetIsActive) {
       await this.assertNoDateOverlapForHotel(
